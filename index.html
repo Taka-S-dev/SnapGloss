@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SnapGloss</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <div id="word-tooltip"></div>
+    <div id="ctx-menu"></div>
+    <div id="loading-bar"></div>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <span id="loading-label"></span>
+    </div>
+
+    <!-- モード選択 -->
+    <div id="mode-overlay">
+      <div id="mode-box">
+        <textarea id="mo-text" placeholder="テキストを入力するか、選択した状態でホットキーを押してください" autocomplete="off" spellcheck="false"></textarea>
+        <input id="mo-search" type="text" placeholder="モードを検索… (↑↓ で移動、Enter で実行、Esc でキャンセル)">
+        <div id="mo-list"></div>
+      </div>
+    </div>
+
+    <!-- 設定 -->
+    <div id="settings-overlay">
+      <div id="settings-box">
+        <div class="s-tabs">
+          <button class="s-tab active" data-tab="api">API設定</button>
+          <button class="s-tab" data-tab="prompts">プロンプト</button>
+        </div>
+        <div id="tab-api" class="s-tab-content">
+          <div class="s-row"><label>API Key</label><input type="password" id="s-apikey" placeholder="sk-..."></div>
+          <div class="s-row"><label>エンドポイント</label><input type="text" id="s-endpoint"></div>
+          <div class="s-row">
+            <label>モデル</label>
+            <input type="text" id="s-model" list="model-list" placeholder="gpt-4o">
+            <datalist id="model-list">
+              <option value="gpt-4o"></option>
+              <option value="gpt-4o-mini"></option>
+              <option value="o1"></option>
+              <option value="o1-mini"></option>
+              <option value="o3"></option>
+              <option value="o3-mini"></option>
+              <option value="gpt-4-turbo"></option>
+            </datalist>
+          </div>
+          <div class="s-row-split">
+            <div class="s-row"><label>Temperature</label><input type="text" id="s-temp"></div>
+            <div class="s-row"><label>Max Tokens</label><input type="text" id="s-tokens"></div>
+          </div>
+          <div class="s-row">
+            <label>ホットキー <span style="font-size:11px;color:#999">（例: ctrl+shift+z、alt+t、f9）</span></label>
+            <input type="text" id="s-hotkey" placeholder="ctrl+shift+z">
+          </div>
+        </div>
+        <div id="tab-prompts" class="s-tab-content" style="display:none">
+          <button id="prompts-add">＋ プロンプトを追加</button>
+          <div id="prompts-list"></div>
+        </div>
+        <div id="settings-msg"></div>
+        <div class="s-btns">
+          <button id="settings-cancel">キャンセル</button>
+          <button id="settings-save" class="primary">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ツールバー -->
+    <div id="bar">
+      <button id="copy-btn">コピー</button>
+      <span id="font-indicator"></span>
+      <span id="mode-label"></span>
+      <button id="settings-btn" class="icon-btn" title="設定">⚙</button>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div id="wrapper">
+      <div id="notice"></div>
+      <div id="content">
+        <div id="empty">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          テキストを選択してホットキーを押すと処理されます
+        </div>
+      </div>
+      <div id="pane-sep"></div>
+      <div id="content-followup"></div>
+      <div id="error-box"></div>
+      <div id="retry-box" style="display:none"><button id="retry-btn">↺ リトライ</button></div>
+      <div id="followup-area">
+        <select id="followup-mode">
+          <option value="qa">💬 質問</option>
+          <option value="grammar">📖 文法</option>
+        </select>
+        <input id="followup-input" type="text" placeholder="追加の質問… (Enter で送信)">
+        <button id="followup-send">送信</button>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+export const FONT_BASE         = 16;   // CSS デフォルトフォントサイズ（px）
+export const FONT_MIN          = 10;
+export const FONT_MAX          = 32;
+export const SPLIT_DEFAULT_PCT = 55;   // スプリットビューのデフォルト上ペイン比率（%）
+export const PANE_MIN_HEIGHT   = 60;   // ドラッグリサイズ時の最小ペイン高（px）
+export const TEXT_MAX_LENGTH   = 8000; // API に送る最大文字数
+export const API_TIMEOUT_MS    = 30000;
+export const TOOLTIP_TIMEOUT_MS = 5000;
+export const COPY_FEEDBACK_MS  = 1500;
+export const FONT_INDICATOR_MS = 1000;
+export const NOTICE_DURATION_MS = 4000;

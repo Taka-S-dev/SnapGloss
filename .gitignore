@@ -1,0 +1,33 @@
+# Ignore everything by default
+*
+
+# Root files
+!.gitignore
+!index.html
+!package.json
+!package-lock.json
+!tsconfig.json
+!vite.config.ts
+!README.md
+
+# Frontend source
+!src/
+!src/**
+
+# Tauri (target/ は src-tauri/.gitignore で除外)
+!src-tauri/
+!src-tauri/.gitignore
+!src-tauri/build.rs
+!src-tauri/Cargo.toml
+!src-tauri/Cargo.lock
+!src-tauri/tauri.conf.json
+!src-tauri/src/
+!src-tauri/src/**
+!src-tauri/icons/
+!src-tauri/icons/**
+!src-tauri/capabilities/
+!src-tauri/capabilities/**
+
+# VSCode recommended extensions only
+!.vscode/
+!.vscode/extensions.json
