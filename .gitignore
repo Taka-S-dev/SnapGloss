@@ -9,6 +9,8 @@
 !tsconfig.json
 !vite.config.ts
 !README.md
+!.github/
+!.github/**
 !LICENSE
 
 # Frontend source

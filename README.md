@@ -1,5 +1,8 @@
 # SnapGloss
 
+[![Test](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/test.yml/badge.svg)](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 ブラウザでも Word でも、アプリを問わずテキストを選んでホットキーを押すだけ。翻訳・要約・文法解析をその場で即実行します。
 
 > **Built with:** Tauri v2 · Rust · TypeScript
@@ -85,14 +88,14 @@ SnapAI-tauri/
 
 ## 基本操作
 
-| 操作 | 説明 |
-|------|------|
-| テキスト選択 → ホットキー | AI 処理を起動（デフォルト: `Ctrl+Shift+Z`）|
-| `ESC` | ウィンドウを隠す |
-| `Ctrl+C` | 結果をコピー（テキスト未選択時）|
-| `Ctrl+ホイール` | フォントサイズ変更 |
-| 単語クリック | 日本語訳・品詞をポップアップ表示 |
-| 右クリック | 選択単語を Web 検索 |
+| 操作                      | 説明                                        |
+| ------------------------- | ------------------------------------------- |
+| テキスト選択 → ホットキー | AI 処理を起動（デフォルト: `Ctrl+Shift+Z`） |
+| `ESC`                     | ウィンドウを隠す                            |
+| `Ctrl+C`                  | 結果をコピー（テキスト未選択時）            |
+| `Ctrl+ホイール`           | フォントサイズ変更                          |
+| 単語クリック              | 日本語訳・品詞をポップアップ表示            |
+| 右クリック                | 選択単語を Web 検索                         |
 
 ---
 
