@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { state, type Message } from "./state";
+import { state, type Message, ChatCompletionSchema } from "./state";
 import { loadSettings } from "./settings";
 import { buildHtml, extractTagValues } from "./renderer";
 import { $, updateContent, showError, showNotice, setLoading, highlightInContent, clearHighlights, wrapWordsInContent } from "./ui";
@@ -32,9 +32,11 @@ export async function callApi(messages: Message[]): Promise<string> {
     }),
     timeout,
   ]);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message ?? "API エラー");
-  return data.choices[0].message.content as string;
+  const data = ChatCompletionSchema.parse(await res.json());
+  if (data.error) throw new Error(data.error.message);
+  const content = data.choices?.[0]?.message.content;
+  if (!content) throw new Error("レスポンスが空です");
+  return content;
 }
 
 export async function processText(text: string, modeName: string, prompt: string) {

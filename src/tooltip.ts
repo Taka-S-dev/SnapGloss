@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { loadSettings } from "./settings";
+import { ChatCompletionSchema } from "./state";
 import { he } from "./renderer";
 import { $ } from "./ui";
 import { showContextMenu } from "./contextMenu";
@@ -123,8 +124,8 @@ async function lookupWord(word: string, sentence: string, translation: string, x
     ]);
 
     if (signal.aborted) return;
-    const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content?.trim() ?? "";
+    const data = ChatCompletionSchema.parse(await res.json());
+    const raw = data.choices?.[0]?.message.content?.trim() ?? "";
 
     let ja = word, pos = "";
     try {

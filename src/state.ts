@@ -1,5 +1,15 @@
+import { z } from "zod";
+
 export interface Prompt { name: string; text: string; }
 export interface Message { role: "system" | "user" | "assistant"; content: string; }
+
+export const ChatCompletionSchema = z.object({
+  choices: z.array(z.object({
+    message: z.object({ content: z.string() }),
+  })).optional(),
+  error: z.object({ message: z.string() }).optional(),
+});
+export type ChatCompletion = z.infer<typeof ChatCompletionSchema>;
 export interface Settings {
   endpoint: string;
   model: string;
