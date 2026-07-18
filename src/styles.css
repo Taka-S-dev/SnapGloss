@@ -185,7 +185,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   transition: opacity .15s;
 }
 #font-indicator.visible { opacity: 1; }
-#mode-label { margin-left: auto; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+#mode-label { margin-left: auto; font-size: 11px; color: var(--text-3); white-space: nowrap; cursor: pointer; border-radius: 4px; padding: 3px 6px; transition: background .12s, color .12s; }
+#mode-label:hover { background: var(--bg-hover); color: var(--text); }
 
 /* ── モード選択オーバーレイ ──────────────────────────────────────────────── */
 #mode-overlay {
@@ -361,12 +362,15 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .s-btns .primary:hover { background: var(--accent-hover); }
 .s-btns button:not(.primary):hover { background: var(--bg-hover); }
 
-#prompts-add {
+.p-tools { display: flex; gap: 8px; margin-bottom: 10px; }
+.p-tools button {
   padding: 4px 12px; border: 1px dashed var(--accent); border-radius: 4px;
   background: var(--bg-panel); color: var(--accent); cursor: pointer; font-size: 12px;
-  font-family: inherit; margin-bottom: 10px; display: block; transition: background .15s;
+  font-family: inherit; transition: background .15s;
 }
-#prompts-add:hover { background: var(--accent-soft); }
+.p-tools button:hover { background: var(--accent-soft); }
+#prompts-export, #prompts-import { border-style: solid; border-color: var(--border-strong); color: var(--text-2); }
+#prompts-export:hover, #prompts-import:hover { background: var(--bg-hover); }
 .p-row { border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
 .p-header { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
 .p-name { flex: 1; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: 4px; font-size: 12px; font-family: inherit; outline: none; background: var(--bg-panel); color: var(--text); }

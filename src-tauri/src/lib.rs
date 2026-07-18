@@ -39,6 +39,41 @@ fn set_api_key(app: AppHandle, key: String) -> Result<(), String> {
     std::fs::write(&path, key).map_err(|e| e.to_string())
 }
 
+fn settings_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path().app_config_dir()
+        .map(|p| p.join("settings.json"))
+        .map_err(|e| e.to_string())
+}
+
+// エクスポート／インポート用（パスはネイティブダイアログでユーザーが選んだもの）
+#[tauri::command]
+fn write_text_file(path: String, contents: String) -> Result<(), String> {
+    std::fs::write(&path, contents).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_settings(app: AppHandle) -> Result<String, String> {
+    let path = settings_file_path(&app)?;
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_settings(app: AppHandle, json: String) -> Result<(), String> {
+    let path = settings_file_path(&app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, json).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn hide_window(app: AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
@@ -198,6 +233,7 @@ fn foreground_is_safe() -> bool { true }
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -209,7 +245,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![hide_window, register_shortcut, get_api_key, set_api_key])
+        .invoke_handler(tauri::generate_handler![hide_window, register_shortcut, get_api_key, set_api_key, get_settings, set_settings, write_text_file, read_text_file])
         .setup(|app| {
             let shortcut = Shortcut::new(
                 Some(Modifiers::CONTROL | Modifiers::SHIFT),

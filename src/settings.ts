@@ -1,24 +1,70 @@
 import { invoke } from "@tauri-apps/api/core";
+import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
+import { z } from "zod";
 import { DEFAULT_PROMPTS, type Prompt, type Settings } from "./state";
 import { he } from "./renderer";
 import { $ } from "./ui";
 
-export function loadSettings(): Settings {
+// 設定は %APPDATA%\<identifier>\settings.json に保存する（apikey と同じ場所）。
+// 起動時に initSettings() で一度読み込み、以降は同期の loadSettings() がキャッシュを返す。
+let _settings: Settings | null = null;
+
+// 新しいデフォルトプロンプトを名前ベースで補充する
+function mergeDefaultPrompts(saved: Prompt[]): Prompt[] {
+  const names = new Set(saved.map(p => p.name));
+  return [...saved, ...DEFAULT_PROMPTS.filter(p => !names.has(p.name))];
+}
+
+function normalizeSettings(p: Partial<Settings> | null): Settings {
   return {
-    endpoint:    localStorage.getItem("snap-gloss:endpoint")    ?? "https://api.openai.com/v1/chat/completions",
-    model:       localStorage.getItem("snap-gloss:model")       ?? "gpt-5.6-luna",
-    temperature: parseFloat(localStorage.getItem("snap-gloss:temp")   ?? "0.5"),
-    maxTokens:   parseInt(localStorage.getItem("snap-gloss:tokens") ?? "2000"),
-    hotkey:      localStorage.getItem("snap-gloss:hotkey")      ?? "ctrl+shift+z",
-    autoHide:    localStorage.getItem("snap-gloss:autoHide") === "1",
-    theme:       (localStorage.getItem("snap-gloss:theme") as Settings["theme"]) ?? "auto",
-    prompts: (() => {
-      const saved: Prompt[] = JSON.parse(localStorage.getItem("snap-gloss:prompts") ?? "null") ?? DEFAULT_PROMPTS;
-      const names = new Set(saved.map(p => p.name));
-      DEFAULT_PROMPTS.filter(p => !names.has(p.name)).forEach(p => saved.push(p));
-      return saved;
-    })(),
+    endpoint:    p?.endpoint    ?? "https://api.openai.com/v1/chat/completions",
+    model:       p?.model       ?? "gpt-5.6-luna",
+    temperature: p?.temperature ?? 0.5,
+    maxTokens:   p?.maxTokens   ?? 2000,
+    hotkey:      p?.hotkey      ?? "ctrl+shift+z",
+    autoHide:    p?.autoHide    ?? false,
+    theme:       p?.theme       ?? "auto",
+    autoRun:     p?.autoRun     ?? "",
+    prompts:     mergeDefaultPrompts(Array.isArray(p?.prompts) ? p!.prompts : []),
   };
+}
+
+// 旧バージョンの localStorage 保存からの移行用
+function settingsFromLocalStorage(): Settings {
+  return normalizeSettings({
+    endpoint:    localStorage.getItem("snap-gloss:endpoint")  ?? undefined,
+    model:       localStorage.getItem("snap-gloss:model")     ?? undefined,
+    temperature: parseFloat(localStorage.getItem("snap-gloss:temp") ?? "0.5"),
+    maxTokens:   parseInt(localStorage.getItem("snap-gloss:tokens") ?? "2000"),
+    hotkey:      localStorage.getItem("snap-gloss:hotkey")    ?? undefined,
+    autoHide:    localStorage.getItem("snap-gloss:autoHide") === "1",
+    theme:       (localStorage.getItem("snap-gloss:theme") as Settings["theme"]) ?? undefined,
+    autoRun:     localStorage.getItem("snap-gloss:autoRun")   ?? undefined,
+    prompts:     JSON.parse(localStorage.getItem("snap-gloss:prompts") ?? "null") ?? undefined,
+  });
+}
+
+/** 起動時に一度だけ呼ぶ。settings.json がなければ localStorage から移行する */
+export async function initSettings(): Promise<void> {
+  try {
+    const raw = await invoke<string>("get_settings");
+    if (raw.trim()) {
+      _settings = normalizeSettings(JSON.parse(raw));
+      return;
+    }
+  } catch { /* 読み込み失敗時は移行フローへ */ }
+  _settings = settingsFromLocalStorage();
+  persistSettings();
+}
+
+export function loadSettings(): Settings {
+  // initSettings 完了前に呼ばれた場合のフォールバック（起動直後の一瞬のみ）
+  return _settings ?? settingsFromLocalStorage();
+}
+
+function persistSettings(): void {
+  if (!_settings) return;
+  invoke("set_settings", { json: JSON.stringify(_settings, null, 2) }).catch(() => {});
 }
 
 /** 設定値（auto のときは OS 状態）に応じて data-theme を付け替える */
@@ -29,14 +75,10 @@ export function applyTheme() {
 }
 
 export function saveSettings(s: Settings): void {
-  localStorage.setItem("snap-gloss:endpoint", s.endpoint);
-  localStorage.setItem("snap-gloss:model",    s.model);
-  localStorage.setItem("snap-gloss:temp",     String(s.temperature));
-  localStorage.setItem("snap-gloss:tokens",   String(s.maxTokens));
-  localStorage.setItem("snap-gloss:hotkey",   s.hotkey);
-  localStorage.setItem("snap-gloss:autoHide", s.autoHide ? "1" : "0");
-  localStorage.setItem("snap-gloss:theme",    s.theme);
-  localStorage.setItem("snap-gloss:prompts",  JSON.stringify(s.prompts));
+  _settings = s;
+  // 初回描画前のテーマ判定（index.html のインラインスクリプト）用ミラー
+  localStorage.setItem("snap-gloss:theme", s.theme);
+  persistSettings();
 }
 
 // ── Settings modal ────────────────────────────────────────────────────────────
@@ -133,6 +175,104 @@ function codeToStr(code: string): string {
   return map[code] ?? "";
 }
 
+// ── 設定のエクスポート／インポート（APIキーは含めない） ──────────────────────
+
+const ExportSchema = z.object({
+  app: z.literal("snap-gloss").optional(),
+  endpoint: z.string().optional(),
+  model: z.string().optional(),
+  temperature: z.number().optional(),
+  maxTokens: z.number().optional(),
+  hotkey: z.string().optional(),
+  theme: z.enum(["auto", "light", "dark"]).optional(),
+  autoRun: z.string().optional(),
+  autoHide: z.boolean().optional(),
+  prompts: z.array(z.object({ name: z.string().min(1), text: z.string().min(1) })).min(1),
+});
+
+function settingsMsg(text: string, ok: boolean) {
+  const msg = $("settings-msg");
+  msg.textContent = text;
+  msg.className = ok ? "ok" : "err";
+}
+
+// フォームの現在値（未保存の編集を含む）をファイルへ書き出す
+async function exportSettings() {
+  const path = await saveDialog({
+    defaultPath: "snapgloss-settings.json",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (!path) return; // キャンセル
+  const data = {
+    app: "snap-gloss" as const,
+    endpoint:    ($("s-endpoint") as HTMLInputElement).value.trim(),
+    model:       ($("s-model")    as HTMLInputElement).value.trim(),
+    temperature: parseFloat(($("s-temp")   as HTMLInputElement).value) || 0.5,
+    maxTokens:   parseInt(($("s-tokens") as HTMLInputElement).value) || 2000,
+    hotkey:      ($("s-hotkey")   as HTMLInputElement).value.trim(),
+    theme:       ($("s-theme")    as HTMLSelectElement).value as Settings["theme"],
+    autoRun:     ($("s-autorun")  as HTMLSelectElement).value,
+    autoHide:    ($("s-autohide") as HTMLInputElement).checked,
+    prompts:     getPrompts(),
+  };
+  try {
+    await invoke("write_text_file", { path, contents: JSON.stringify(data, null, 2) });
+    settingsMsg("書き出しました（APIキーは含まれません）", true);
+  } catch (e) {
+    settingsMsg(`書き出しに失敗しました：${e}`, false);
+  }
+}
+
+// 選択した JSON ファイルをフォームに反映する（「保存」を押すまで確定しない）
+async function importSettings() {
+  const path = await openDialog({
+    multiple: false,
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (!path || Array.isArray(path)) return; // キャンセル
+  let raw: string;
+  try {
+    raw = await invoke<string>("read_text_file", { path });
+  } catch (e) {
+    settingsMsg(`ファイルを読み取れません：${e}`, false);
+    return;
+  }
+  let parsed;
+  try {
+    parsed = ExportSchema.parse(JSON.parse(raw));
+  } catch {
+    settingsMsg("設定ファイルとして読み取れない JSON です", false);
+    return;
+  }
+  if (parsed.endpoint    !== undefined) ($("s-endpoint") as HTMLInputElement).value = parsed.endpoint;
+  if (parsed.model       !== undefined) ($("s-model")    as HTMLInputElement).value = parsed.model;
+  if (parsed.temperature !== undefined) ($("s-temp")     as HTMLInputElement).value = String(parsed.temperature);
+  if (parsed.maxTokens   !== undefined) ($("s-tokens")   as HTMLInputElement).value = String(parsed.maxTokens);
+  if (parsed.hotkey      !== undefined) ($("s-hotkey")   as HTMLInputElement).value = parsed.hotkey;
+  if (parsed.theme       !== undefined) ($("s-theme")    as HTMLSelectElement).value = parsed.theme;
+  if (parsed.autoHide    !== undefined) ($("s-autohide") as HTMLInputElement).checked = parsed.autoHide;
+  renderPrompts(parsed.prompts);
+  renderAutoRunOptions({ ...loadSettings(), prompts: parsed.prompts, autoRun: parsed.autoRun ?? "" });
+  settingsMsg(`${parsed.prompts.length} 件のプロンプトを読み込みました。「保存」で確定します`, true);
+}
+
+// 即実行の選択肢は保存済みプロンプトに依存するので開くたびに作り直す
+function renderAutoRunOptions(s: Settings) {
+  const sel = $("s-autorun") as HTMLSelectElement;
+  sel.innerHTML = "";
+  const add = (value: string, label: string) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  };
+  add("", "オフ（モード選択を表示）");
+  add("__last__", "前回使ったモード");
+  for (const p of s.prompts) add(p.name, `「${p.name}」で実行`);
+  // 保存値のプロンプトが削除・改名されていたらオフに戻す
+  sel.value = [...sel.options].some(o => o.value === s.autoRun) ? s.autoRun : "";
+}
+
 function switchTab(tab: string) {
   $("tab-api").style.display     = tab === "api"     ? "" : "none";
   $("tab-prompts").style.display = tab === "prompts" ? "" : "none";
@@ -159,6 +299,7 @@ async function doSaveSettings() {
     hotkey,
     autoHide:    ($("s-autohide") as HTMLInputElement).checked,
     theme:       ($("s-theme") as HTMLSelectElement).value as Settings["theme"],
+    autoRun:     ($("s-autorun") as HTMLSelectElement).value,
     prompts:     getPrompts(),
   };
 
@@ -189,6 +330,7 @@ export async function openSettings() {
   ($("s-hotkey")   as HTMLInputElement).value  = s.hotkey;
   ($("s-autohide") as HTMLInputElement).checked = s.autoHide;
   ($("s-theme") as HTMLSelectElement).value = s.theme;
+  renderAutoRunOptions(s);
   renderPrompts(s.prompts);
   $("settings-msg").textContent = "";
   $("settings-msg").className = "";
@@ -248,6 +390,8 @@ export function initSettingsModal() {
   $("settings-cancel").addEventListener("click", closeSettings);
   $("settings-save").addEventListener("click", doSaveSettings);
   $("prompts-add").addEventListener("click", () => $("prompts-list").appendChild(makePromptRow("", "")));
+  $("prompts-export").addEventListener("click", exportSettings);
+  $("prompts-import").addEventListener("click", importSettings);
   document.querySelectorAll<HTMLElement>(".s-tab").forEach(btn => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab!));
   });

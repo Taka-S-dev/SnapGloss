@@ -65,6 +65,10 @@
             <label><input type="checkbox" id="s-autohide"> 他のアプリをクリックしたら自動でウィンドウを隠す</label>
           </div>
           <div class="s-row">
+            <label>ホットキーで即実行 <span style="font-size:11px;color:var(--text-3)">（モード選択を飛ばして指定モードで実行。モード名クリックで選択画面に戻れます）</span></label>
+            <select id="s-autorun"></select>
+          </div>
+          <div class="s-row">
             <label>テーマ</label>
             <select id="s-theme">
               <option value="auto">自動（OS に合わせる）</option>
@@ -74,7 +78,11 @@
           </div>
         </div>
         <div id="tab-prompts" class="s-tab-content" style="display:none">
-          <button id="prompts-add">＋ プロンプトを追加</button>
+          <div class="p-tools">
+            <button id="prompts-add">＋ プロンプトを追加</button>
+            <button id="prompts-export" title="プロンプトを含む設定一式（APIキー除く）を JSON ファイルに書き出し">エクスポート</button>
+            <button id="prompts-import" title="JSON ファイルを選んでフォームに読み込み（「保存」で確定）">インポート</button>
+          </div>
           <div id="prompts-list"></div>
         </div>
         <div id="settings-msg"></div>
@@ -108,6 +116,7 @@
             <li><kbd>1</kbd>〜<kbd>9</kbd> でモードを一発選択（<kbd>↑↓</kbd> + <kbd>Enter</kbd> でも可）</li>
             <li>テキスト欄から <kbd>Ctrl+Enter</kbd> で選択中モードを実行</li>
             <li>テキスト欄の ✕ で空にして、翻訳と関係ない質問をすぐ入力</li>
+            <li>設定「ホットキーで即実行」でモード選択を省略可（ツールバーのモード名クリックで選択画面に戻れる）</li>
           </ul>
           <h4>結果画面</h4>
           <ul>
@@ -125,6 +134,7 @@
           <h4>その他</h4>
           <ul>
             <li>時計アイコン：履歴（直近20件）の再表示・削除</li>
+            <li>設定のプロンプトタブから設定一式を JSON ファイルにエクスポート／インポート（APIキーは含まれない）</li>
             <li>回答に mermaid 図・表・コードが含まれる場合は自動でレンダリング</li>
             <li>完全終了はタスクトレイの「終了」から</li>
           </ul>

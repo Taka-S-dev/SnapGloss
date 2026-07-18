@@ -47,6 +47,21 @@ function selectMode(modeName: string, prompt: string) {
   processText(text, modeName, prompt);
 }
 
+/** 指定プロンプトで即実行する（オーバーレイを経由しない） */
+export function runPrompt(text: string, p: Prompt) {
+  const ta = $("mo-text") as HTMLTextAreaElement;
+  ta.value = text;
+  selectMode(p.name, p.text);
+}
+
+/** 設定の「即実行」値からプロンプトを解決する。見つからなければ null */
+export function resolveAutoRunPrompt(autoRun: string): Prompt | null {
+  if (!autoRun) return null;
+  const prompts = loadSettings().prompts;
+  const name = autoRun === "__last__" ? localStorage.getItem("snap-gloss:lastMode") ?? "" : autoRun;
+  return prompts.find(pr => pr.name === name) ?? null;
+}
+
 /** ホットキー2度押し用：前回使ったモードで即実行する */
 export function runLastMode(text: string) {
   const ta = $("mo-text") as HTMLTextAreaElement;
@@ -56,8 +71,7 @@ export function runLastMode(text: string) {
   const lastMode = localStorage.getItem("snap-gloss:lastMode");
   const p = prompts.find(pr => pr.name === lastMode) ?? prompts[0];
   if (!p) return;
-  ta.value = t;
-  selectMode(p.name, p.text);
+  runPrompt(t, p);
 }
 
 export function closeModeOverlay() {

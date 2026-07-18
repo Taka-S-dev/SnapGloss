@@ -4,11 +4,11 @@ import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 import { state } from "./state";
-import { loadSettings } from "./settings";
+import { loadSettings, initSettings } from "./settings";
 import { FONT_BASE, FONT_MIN, FONT_MAX, PANE_MIN_HEIGHT, COPY_FEEDBACK_MS, FONT_INDICATOR_MS } from "./constants";
 import { $, setLoading, resetContent, clearFollowupThread } from "./ui";
 import { openSettings, closeSettings, initSettingsModal, applyTheme } from "./settings";
-import { showModeOverlay, closeModeOverlay, initModeOverlay, runLastMode } from "./modeOverlay";
+import { showModeOverlay, closeModeOverlay, initModeOverlay, runLastMode, runPrompt, resolveAutoRunPrompt } from "./modeOverlay";
 import { initWordTooltip } from "./tooltip";
 import { initContextMenu, showContextMenu } from "./contextMenu";
 import { processFollowup, processText } from "./api";
@@ -66,6 +66,8 @@ function initPaneSep() {
 }
 
 async function init() {
+  // 設定ファイルを最初に読み込む（以降の loadSettings は同期キャッシュ）
+  await initSettings();
   applyTheme();
   // 「自動」のとき OS のテーマ切替に即追従する
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
@@ -79,6 +81,12 @@ async function init() {
     // 設定・履歴が開いたままだと重なって表示されるので、先に閉じる
     if ($("settings-overlay").classList.contains("open")) closeSettings();
     if (isHistoryOpen()) closeHistory();
+    // 即実行が設定されていて取得テキストがあれば、モード選択を飛ばす
+    const auto = resolveAutoRunPrompt(loadSettings().autoRun);
+    if (auto && event.payload.trim()) {
+      runPrompt(event.payload, auto);
+      return;
+    }
     showModeOverlay(event.payload);
   });
 
@@ -177,6 +185,9 @@ async function init() {
     showFontIndicator(Math.round((state.fontSize / FONT_BASE) * 100));
   }, { passive: false });
   $("settings-btn").addEventListener("click", openSettings);
+  // 即実行オプション使用時の逃げ道：モード名クリックでモード選択を開く
+  $("mode-label").title = "クリックでモード選択を開く";
+  $("mode-label").addEventListener("click", () => showModeOverlay(state.lastCall?.text ?? ""));
   $("help-btn").addEventListener("click", () => $("help-overlay").classList.toggle("open"));
   $("help-overlay").addEventListener("click", e => {
     if (e.target === $("help-overlay")) $("help-overlay").classList.remove("open");

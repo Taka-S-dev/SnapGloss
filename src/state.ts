@@ -26,6 +26,8 @@ export interface Settings {
   hotkey: string;
   autoHide: boolean;
   theme: "auto" | "light" | "dark";
+  /** ホットキーで即実行するモード。"" = オフ、"__last__" = 前回のモード、それ以外はプロンプト名 */
+  autoRun: string;
   prompts: Prompt[];
 }
 
