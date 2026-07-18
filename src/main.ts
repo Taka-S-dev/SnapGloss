@@ -226,7 +226,7 @@ async function init() {
       else if ($("settings-overlay").classList.contains("open")) closeSettings();
       else if (isHistoryOpen()) closeHistory();
       else if ($("help-overlay").classList.contains("open")) $("help-overlay").classList.remove("open");
-      else { resetContent(); invoke("hide_window"); }
+      else { resetContent(loadSettings().hotkey); invoke("hide_window"); }
     } else if (e.key === "c" && e.ctrlKey && !e.shiftKey && !e.altKey) {
       if (state.rawText && !window.getSelection()?.toString()) {
         e.preventDefault();
@@ -236,7 +236,7 @@ async function init() {
     }
   });
 
-  resetContent();
+  resetContent(loadSettings().hotkey);
 
   // 起動完了後にウィンドウを表示する（設定の visible: false は初期描画のちらつき防止。
   // 非表示のままだと起動に気づけないため、案内付きの空状態を最初に見せる）

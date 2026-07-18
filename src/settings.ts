@@ -50,6 +50,8 @@ export async function initSettings(): Promise<void> {
     const raw = await invoke<string>("get_settings");
     if (raw.trim()) {
       _settings = normalizeSettings(JSON.parse(raw));
+      // 初回描画前テーマ判定用ミラーを補充（新しい WebView2 プロファイルでは空のため）
+      localStorage.setItem("snap-gloss:theme", _settings.theme);
       return;
     }
   } catch { /* 読み込み失敗時は移行フローへ */ }
