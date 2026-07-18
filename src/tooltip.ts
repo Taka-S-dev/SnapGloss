@@ -29,11 +29,16 @@ function clearWordHighlights() {
   _occWord = "";
 }
 
-async function speakWord(word: string) {
-  const s = loadSettings();
-  const apiKey = await invoke<string>("get_api_key");
-  if (!apiKey) return;
+async function speakWord(word: string, btn?: HTMLButtonElement) {
+  // 音声生成に1〜2秒かかるので、押した瞬間にボタンで受け付けたことを示す
+  if (btn) { btn.disabled = true; btn.textContent = "…"; btn.classList.add("busy"); }
+  const restore = () => {
+    if (btn) { btn.disabled = false; btn.textContent = "🔊"; btn.classList.remove("busy"); }
+  };
   try {
+    const s = loadSettings();
+    const apiKey = await invoke<string>("get_api_key");
+    if (!apiKey) { restore(); return; }
     let blob = _audioCache.get(word);
     if (!blob) {
       const base = s.endpoint.replace(/\/chat\/completions$/, "");
@@ -42,15 +47,18 @@ async function speakWord(word: string) {
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
         body: JSON.stringify({ model: "tts-1-hd", input: `${word}.`, voice: "shimmer" }),
       });
-      if (!res.ok) return;
+      if (!res.ok) { restore(); return; }
       blob = await res.blob();
       _audioCache.set(word, blob);
     }
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     audio.play();
+    restore(); // 再生が始まった時点で戻す
     audio.onended = () => URL.revokeObjectURL(url);
-  } catch { /* silent fail */ }
+  } catch {
+    restore();
+  }
 }
 
 function showTooltip(x: number, y: number, html: string, loading = false) {
@@ -61,7 +69,7 @@ function showTooltip(x: number, y: number, html: string, loading = false) {
   if (!loading) {
     tip.querySelector(".tip-speak")!.addEventListener("click", e => {
       e.stopPropagation();
-      speakWord(_currentWord);
+      speakWord(_currentWord, e.currentTarget as HTMLButtonElement);
     });
   }
   tip.className = "visible" + (loading ? " loading" : "");
@@ -105,14 +113,16 @@ async function lookupWord(word: string, sentence: string, translation: string, x
     const context = translation
       ? `英文「${sentence}」の日本語訳は「${translation}」です。この文での`
       : `英文「${sentence}」での`;
+    // o1/o3 系・GPT-5 系は max_tokens / temperature を受け付けない。
+    // また reasoning がトークンを消費するため上限は余裕を持たせる。
+    const isReasoning = /^(o\d|gpt-5)/.test(s.model);
     const body = JSON.stringify({
       model: s.model,
       messages: [{
         role: "user",
         content: `${context}「${word}」を次のJSON形式のみで答えてください:\n{"ja":"日本語訳","pos":"品詞"}\n品詞は 名詞/動詞/形容詞/副詞/前置詞/接続詞/代名詞/その他 のいずれか。${translation ? "訳は日本語訳から該当部分を優先。" : ""}`,
       }],
-      max_tokens: 60,
-      temperature: 0,
+      ...(isReasoning ? { max_completion_tokens: 500 } : { max_tokens: 60, temperature: 0 }),
     });
 
     const timeout = new Promise<never>((_, reject) =>
@@ -125,7 +135,9 @@ async function lookupWord(word: string, sentence: string, translation: string, x
 
     if (signal.aborted) return;
     const data = ChatCompletionSchema.parse(await res.json());
+    if (!res.ok || data.error) { hideTooltip(); return; }
     const raw = data.choices?.[0]?.message.content?.trim() ?? "";
+    if (!raw) { hideTooltip(); return; }
 
     let ja = word, pos = "";
     try {

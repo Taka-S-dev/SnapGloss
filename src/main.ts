@@ -6,19 +6,33 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { state } from "./state";
 import { loadSettings } from "./settings";
 import { FONT_BASE, FONT_MIN, FONT_MAX, PANE_MIN_HEIGHT, COPY_FEEDBACK_MS, FONT_INDICATOR_MS } from "./constants";
-import { $, setLoading, resetContent } from "./ui";
-import { openSettings, closeSettings, initSettingsModal } from "./settings";
-import { showModeOverlay, closeModeOverlay, initModeOverlay } from "./modeOverlay";
+import { $, setLoading, resetContent, clearFollowupThread } from "./ui";
+import { openSettings, closeSettings, initSettingsModal, applyTheme } from "./settings";
+import { showModeOverlay, closeModeOverlay, initModeOverlay, runLastMode } from "./modeOverlay";
 import { initWordTooltip } from "./tooltip";
 import { initContextMenu, showContextMenu } from "./contextMenu";
 import { processFollowup, processText } from "./api";
+import { initHistory, closeHistory, isHistoryOpen } from "./history";
+
+let _copyTimer: ReturnType<typeof setTimeout> | null = null;
+function showCopyFeedback() {
+  const btn = $("copy-btn");
+  $("copy-label").textContent = "コピー済 ✓";
+  btn.classList.add("copied");
+  if (_copyTimer) clearTimeout(_copyTimer);
+  _copyTimer = setTimeout(() => {
+    $("copy-label").textContent = "コピー";
+    btn.classList.remove("copied");
+  }, COPY_FEEDBACK_MS);
+}
 
 function submitFollowup() {
-  const input = $("followup-input") as HTMLInputElement;
+  const input = $("followup-input") as HTMLTextAreaElement;
   const text = input.value.trim();
   if (!text || !state.conv.lastResult) return;
   const mode = ($("followup-mode") as HTMLSelectElement).value as "qa" | "grammar";
   input.value = "";
+  input.style.height = "auto";
   setLoading(true, mode === "grammar" ? "文法解析中…" : "追加質問中…");
   processFollowup(text, mode);
 }
@@ -52,7 +66,19 @@ function initPaneSep() {
 }
 
 async function init() {
+  applyTheme();
+  // 「自動」のとき OS のテーマ切替に即追従する
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+
   await listen<string>("hotkey-fired", event => {
+    // オーバーレイ表示中にもう一度ホットキー → 前回モードで即実行
+    if ($("mode-overlay").classList.contains("open")) {
+      runLastMode(event.payload);
+      return;
+    }
+    // 設定・履歴が開いたままだと重なって表示されるので、先に閉じる
+    if ($("settings-overlay").classList.contains("open")) closeSettings();
+    if (isHistoryOpen()) closeHistory();
     showModeOverlay(event.payload);
   });
 
@@ -61,18 +87,40 @@ async function init() {
     invoke("hide_window");
   });
 
+  // オプション：フォーカスが外れたら自動で隠す（設定でオンにした場合のみ）
+  // タイトルバーのクリックやドラッグでも WebView は一時的に blur するため、
+  // 少し待ってからウィンドウ自体が非アクティブになったかを確認して判定する
+  let autoHideTimer: ReturnType<typeof setTimeout> | null = null;
+  await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+    if (focused) {
+      if (autoHideTimer) { clearTimeout(autoHideTimer); autoHideTimer = null; }
+      return;
+    }
+    if (!loadSettings().autoHide) return;
+    autoHideTimer = setTimeout(async () => {
+      autoHideTimer = null;
+      if (await getCurrentWindow().isFocused().catch(() => true)) return;
+      // モード選択が開いたまま隠れると、次のホットキーが「2度押し」扱いになるので閉じておく
+      closeModeOverlay();
+      invoke("hide_window");
+    }, 250);
+  });
+
   initSettingsModal();
   initModeOverlay();
   initWordTooltip();
   initContextMenu();
   initPaneSep();
+  initHistory();
 
-  $("content").addEventListener("contextmenu", e => {
-    const selected = window.getSelection()?.toString().trim();
-    const spanWord = (e.target as HTMLElement).closest<HTMLElement>("span.w")?.textContent?.trim();
-    const word = selected || spanWord;
-    if (word) { e.preventDefault(); showContextMenu(e.clientX, e.clientY, word); }
-  });
+  for (const id of ["content", "content-followup"]) {
+    $(id).addEventListener("contextmenu", e => {
+      const selected = window.getSelection()?.toString().trim();
+      const spanWord = (e.target as HTMLElement).closest<HTMLElement>("span.w")?.textContent?.trim();
+      const word = selected || spanWord;
+      if (word) { e.preventDefault(); showContextMenu(e.clientX, e.clientY, word); }
+    });
+  }
 
   const savedHotkey = loadSettings().hotkey;
   if (savedHotkey !== "ctrl+shift+z") {
@@ -101,9 +149,7 @@ async function init() {
   $("copy-btn").addEventListener("click", async () => {
     if (!state.rawText) return;
     await writeText(state.rawText);
-    const btn = $("copy-btn");
-    btn.textContent = "コピー済 ✓"; btn.classList.add("copied");
-    setTimeout(() => { btn.textContent = "コピー"; btn.classList.remove("copied"); }, COPY_FEEDBACK_MS);
+    showCopyFeedback();
   });
   let _fontIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
   const showFontIndicator = (pct: number) => {
@@ -131,6 +177,10 @@ async function init() {
     showFontIndicator(Math.round((state.fontSize / FONT_BASE) * 100));
   }, { passive: false });
   $("settings-btn").addEventListener("click", openSettings);
+  $("help-btn").addEventListener("click", () => $("help-overlay").classList.toggle("open"));
+  $("help-overlay").addEventListener("click", e => {
+    if (e.target === $("help-overlay")) $("help-overlay").classList.remove("open");
+  });
   $("retry-btn").addEventListener("click", () => {
     if (!state.lastCall) return;
     const { text, modeName, prompt } = state.lastCall;
@@ -147,8 +197,15 @@ async function init() {
     $("followup-area").classList.toggle("grammar-mode", isGrammar);
   });
   $("followup-send").addEventListener("click", submitFollowup);
-  ($("followup-input") as HTMLInputElement).addEventListener("keydown", e => {
+  $("followup-clear").addEventListener("click", clearFollowupThread);
+  const followupInput = $("followup-input") as HTMLTextAreaElement;
+  followupInput.addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitFollowup(); }
+  });
+  // 入力量に応じて欄を伸ばす（上限は CSS の max-height）
+  followupInput.addEventListener("input", () => {
+    followupInput.style.height = "auto";
+    followupInput.style.height = followupInput.scrollHeight + "px";
   });
 
   // キーボードショートカット
@@ -156,14 +213,14 @@ async function init() {
     if (e.key === "Escape") {
       if ($("mode-overlay").classList.contains("open"))     { closeModeOverlay(); invoke("hide_window"); }
       else if ($("settings-overlay").classList.contains("open")) closeSettings();
+      else if (isHistoryOpen()) closeHistory();
+      else if ($("help-overlay").classList.contains("open")) $("help-overlay").classList.remove("open");
       else { resetContent(); invoke("hide_window"); }
     } else if (e.key === "c" && e.ctrlKey && !e.shiftKey && !e.altKey) {
       if (state.rawText && !window.getSelection()?.toString()) {
         e.preventDefault();
         await writeText(state.rawText);
-        const btn = $("copy-btn");
-        btn.textContent = "コピー済 ✓"; btn.classList.add("copied");
-        setTimeout(() => { btn.textContent = "コピー"; btn.classList.remove("copied"); }, COPY_FEEDBACK_MS);
+        showCopyFeedback();
       }
     }
   });

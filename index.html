@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SnapGloss</title>
+    <script>
+      // 初回描画前にテーマを確定してフラッシュを防ぐ（以降の切替は settings.ts の applyTheme）
+      (function () {
+        var t = localStorage.getItem("snap-gloss:theme") || "auto";
+        var dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      })();
+    </script>
     <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.ts" defer></script>
   </head>
@@ -19,8 +27,11 @@
     <!-- モード選択 -->
     <div id="mode-overlay">
       <div id="mode-box">
-        <textarea id="mo-text" placeholder="テキストを入力するか、選択した状態でホットキーを押してください" autocomplete="off" spellcheck="false"></textarea>
-        <input id="mo-search" type="text" placeholder="モードを検索… (↑↓ で移動、Enter で実行、Esc でキャンセル)">
+        <div class="mo-text-wrap">
+          <textarea id="mo-text" placeholder="テキストを入力するか、選択した状態でホットキーを押してください（Ctrl+Enter で実行）" autocomplete="off" spellcheck="false"></textarea>
+          <button id="mo-clear" title="クリアして質問を入力">✕</button>
+        </div>
+        <input id="mo-search" type="text" placeholder="モードを検索… (↑↓/数字 で選択、Enter で実行、ホットキー再押下で前回モード)">
         <div id="mo-list"></div>
       </div>
     </div>
@@ -37,16 +48,10 @@
           <div class="s-row"><label>エンドポイント</label><input type="text" id="s-endpoint"></div>
           <div class="s-row">
             <label>モデル</label>
-            <input type="text" id="s-model" list="model-list" placeholder="gpt-4o">
-            <datalist id="model-list">
-              <option value="gpt-4o"></option>
-              <option value="gpt-4o-mini"></option>
-              <option value="o1"></option>
-              <option value="o1-mini"></option>
-              <option value="o3"></option>
-              <option value="o3-mini"></option>
-              <option value="gpt-4-turbo"></option>
-            </datalist>
+            <div class="s-model-wrap">
+              <input type="text" id="s-model" placeholder="gpt-5.6-luna" autocomplete="off" spellcheck="false">
+              <div id="model-menu"></div>
+            </div>
           </div>
           <div class="s-row-split">
             <div class="s-row"><label>Temperature</label><input type="text" id="s-temp"></div>
@@ -55,6 +60,17 @@
           <div class="s-row">
             <label>ホットキー <span style="font-size:11px;color:#999">（例: ctrl+shift+z、alt+t、f9）</span></label>
             <input type="text" id="s-hotkey" placeholder="ctrl+shift+z">
+          </div>
+          <div class="s-row s-check">
+            <label><input type="checkbox" id="s-autohide"> 他のアプリをクリックしたら自動でウィンドウを隠す</label>
+          </div>
+          <div class="s-row">
+            <label>テーマ</label>
+            <select id="s-theme">
+              <option value="auto">自動（OS に合わせる）</option>
+              <option value="light">ライト</option>
+              <option value="dark">ダーク</option>
+            </select>
           </div>
         </div>
         <div id="tab-prompts" class="s-tab-content" style="display:none">
@@ -69,12 +85,70 @@
       </div>
     </div>
 
+    <!-- 履歴 -->
+    <div id="history-overlay">
+      <div id="history-box">
+        <div id="history-head-row">
+          <div id="history-title">履歴（クリックで再表示）</div>
+          <button id="history-clear">全削除</button>
+        </div>
+        <div id="history-list"></div>
+      </div>
+    </div>
+
+    <!-- ヘルプ -->
+    <div id="help-overlay">
+      <div id="help-box">
+        <div id="help-title">ヘルプ</div>
+        <div class="help-body">
+          <h4>基本の流れ</h4>
+          <ul>
+            <li>テキストを選択して <kbd>ホットキー</kbd> → モード選択が開く</li>
+            <li><kbd>ホットキー ×2</kbd> 前回と同じモードで即実行</li>
+            <li><kbd>1</kbd>〜<kbd>9</kbd> でモードを一発選択（<kbd>↑↓</kbd> + <kbd>Enter</kbd> でも可）</li>
+            <li>テキスト欄から <kbd>Ctrl+Enter</kbd> で選択中モードを実行</li>
+            <li>テキスト欄の ✕ で空にして、翻訳と関係ない質問をすぐ入力</li>
+          </ul>
+          <h4>結果画面</h4>
+          <ul>
+            <li>原文（英文）の単語をクリック／選択 → 訳・品詞・読み上げのツールチップ</li>
+            <li>右クリック → Web検索／「この部分について質問」</li>
+            <li><kbd>Ctrl+C</kbd> 結果をコピー　<kbd>Ctrl+ホイール</kbd> 文字サイズ</li>
+            <li><kbd>Esc</kbd> 内容をリセットしてウィンドウを隠す</li>
+          </ul>
+          <h4>追加質問（下の入力欄）</h4>
+          <ul>
+            <li><b>質問</b>：表示中の内容について自由に追加質問する</li>
+            <li><b>文法</b>：文法解説モード。回答が引用した語句を本文中にハイライトする</li>
+            <li><kbd>Enter</kbd> 送信　<kbd>Shift+Enter</kbd> 改行　✕ で会話をリセット</li>
+          </ul>
+          <h4>その他</h4>
+          <ul>
+            <li>時計アイコン：履歴（直近20件）の再表示・削除</li>
+            <li>回答に mermaid 図・表・コードが含まれる場合は自動でレンダリング</li>
+            <li>完全終了はタスクトレイの「終了」から</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <!-- ツールバー -->
     <div id="bar">
-      <button id="copy-btn">コピー</button>
+      <button id="copy-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span id="copy-label">コピー</span>
+      </button>
       <span id="font-indicator"></span>
       <span id="mode-label"></span>
-      <button id="settings-btn" class="icon-btn" title="設定">⚙</button>
+      <button id="history-btn" class="icon-btn" title="履歴">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
+      </button>
+      <button id="settings-btn" class="icon-btn" title="設定">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button id="help-btn" class="icon-btn" title="ヘルプ">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </button>
     </div>
 
     <!-- メインコンテンツ -->
@@ -94,12 +168,13 @@
       <div id="error-box"></div>
       <div id="retry-box" style="display:none"><button id="retry-btn">↺ リトライ</button></div>
       <div id="followup-area">
-        <select id="followup-mode">
-          <option value="qa">💬 質問</option>
-          <option value="grammar">📖 文法</option>
+        <select id="followup-mode" title="質問：表示中の内容について自由に追加質問｜文法：文法解説モード（回答が引用した語句を本文中にハイライト）">
+          <option value="qa">質問</option>
+          <option value="grammar">文法</option>
         </select>
-        <input id="followup-input" type="text" placeholder="追加の質問… (Enter で送信)">
+        <textarea id="followup-input" rows="1" placeholder="追加の質問… (Enter で送信、Shift+Enter で改行)"></textarea>
         <button id="followup-send">送信</button>
+        <button id="followup-clear" title="会話をクリア">✕</button>
       </div>
     </div>
   </body>

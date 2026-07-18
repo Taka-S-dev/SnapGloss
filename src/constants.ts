@@ -9,3 +9,6 @@ export const TOOLTIP_TIMEOUT_MS = 5000;
 export const COPY_FEEDBACK_MS  = 1500;
 export const FONT_INDICATOR_MS = 1000;
 export const NOTICE_DURATION_MS = 4000;
+export const FOLLOWUP_HISTORY_MAX = 12;      // フォローアップ文脈に含める直近メッセージ数（原文＋メイン結果は別枠）
+export const STREAM_RENDER_INTERVAL_MS = 80; // ストリーミング中の再描画間隔
+export const HISTORY_MAX = 20;               // 保存する履歴件数
