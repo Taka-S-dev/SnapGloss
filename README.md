@@ -1,6 +1,8 @@
 # SnapGloss
 
 [![Test](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/test.yml/badge.svg)](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/test.yml)
+[![Release](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/release.yml/badge.svg)](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Taka-S-dev/SnapGloss?include_prereleases)](https://github.com/Taka-S-dev/SnapGloss/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ブラウザでも Word でも、アプリを問わずテキストを選んでホットキーを押すだけ。翻訳・要約・文法解析・自由質問をその場で即実行し、結果をストリーミング表示します。
