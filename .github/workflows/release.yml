@@ -28,6 +28,7 @@ jobs:
       # ビルドして NSIS/MSI インストーラーをドラフトリリースに添付する。
       # ドラフトなので内容を確認してから手動で公開する運用
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -35,3 +36,17 @@ jobs:
           releaseName: "SnapGloss ${{ github.ref_name }}"
           releaseDraft: true
           prerelease: false
+
+      # 単体 exe をポータブル版としてリリースに追加する
+      # （インストール不要で動くが、WebView2 ランタイムは必要。設定は %APPDATA% に保存される）
+      - name: Upload portable exe
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $name = "snap-gloss_${{ github.ref_name }}_x64_portable.exe"
+          curl.exe -sS --fail-with-body -X POST `
+            -H "Authorization: Bearer $env:GH_TOKEN" `
+            -H "Content-Type: application/octet-stream" `
+            --data-binary "@src-tauri/target/release/snap-gloss.exe" `
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.tauri.outputs.releaseId }}/assets?name=$name"
