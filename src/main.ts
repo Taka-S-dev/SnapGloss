@@ -240,7 +240,7 @@ async function init() {
 
   // 起動完了後にウィンドウを表示する（設定の visible: false は初期描画のちらつき防止。
   // 非表示のままだと起動に気づけないため、案内付きの空状態を最初に見せる）
-  await getCurrentWindow().show();
+  await invoke("show_window");
 }
 
 init();

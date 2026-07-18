@@ -81,6 +81,15 @@ fn hide_window(app: AppHandle) {
     }
 }
 
+// JS 側の window.show() は capability 制限で失敗するため Rust 側で行う
+#[tauri::command]
+fn show_window(app: AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+}
+
 #[tauri::command]
 fn register_shortcut(app: AppHandle, shortcut_str: String) -> Result<(), String> {
     let shortcut = parse_shortcut(&shortcut_str)
@@ -245,7 +254,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![hide_window, register_shortcut, get_api_key, set_api_key, get_settings, set_settings, write_text_file, read_text_file])
+        .invoke_handler(tauri::generate_handler![hide_window, show_window, register_shortcut, get_api_key, set_api_key, get_settings, set_settings, write_text_file, read_text_file])
         .setup(|app| {
             let shortcut = Shortcut::new(
                 Some(Modifiers::CONTROL | Modifiers::SHIFT),
