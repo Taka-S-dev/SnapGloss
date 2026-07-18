@@ -97,6 +97,28 @@ fn parse_shortcut(s: &str) -> Option<Shortcut> {
     Some(Shortcut::new(if mods.is_empty() { None } else { Some(mods) }, code?))
 }
 
+/// ウィンドウをマウスカーソルの近くに移動する。
+/// カーソルのあるモニターの作業領域（タスクバー除く）内に収まるようクランプする。
+fn move_window_to_cursor(app: &AppHandle, win: &tauri::WebviewWindow) {
+    let Ok(cursor) = app.cursor_position() else { return };
+    let Ok(size) = win.outer_size() else { return };
+
+    let mut x = cursor.x + 12.0;
+    let mut y = cursor.y + 12.0;
+
+    if let Ok(Some(monitor)) = app.monitor_from_point(cursor.x, cursor.y) {
+        let area = monitor.work_area();
+        let min_x = area.position.x as f64;
+        let min_y = area.position.y as f64;
+        let max_x = min_x + area.size.width as f64 - size.width as f64;
+        let max_y = min_y + area.size.height as f64 - size.height as f64;
+        x = x.clamp(min_x, max_x.max(min_x));
+        y = y.clamp(min_y, max_y.max(min_y));
+    }
+
+    let _ = win.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+}
+
 fn hotkey_handler(app: &AppHandle, safe_to_copy: bool) {
     let app = app.clone();
     thread::spawn(move || {
@@ -124,6 +146,7 @@ fn hotkey_handler(app: &AppHandle, safe_to_copy: bool) {
         };
 
         if let Some(win) = app.get_webview_window("main") {
+            move_window_to_cursor(&app, &win);
             let _ = win.unminimize();
             let _ = win.show();
             let _ = win.set_focus();
