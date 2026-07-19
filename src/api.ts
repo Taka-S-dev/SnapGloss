@@ -7,7 +7,7 @@ import { renderMermaidIn } from "./mermaidRender";
 import { API_TIMEOUT_MS, TEXT_MAX_LENGTH, SPLIT_DEFAULT_PCT, FOLLOWUP_HISTORY_MAX, STREAM_RENDER_INTERVAL_MS } from "./constants";
 import { addHistory } from "./history";
 
-const POS_INSTRUCTION = `\n\n英文中の品詞を以下のタグで囲んでください（英語テキストにのみ適用）：%%V:動詞%% %%N:名詞%% %%ADJ:形容詞%% %%ADV:副詞%%。日本語訳には適用しないでください。`;
+const POS_INSTRUCTION = `\n\n出力に英文が含まれる場合のみ、その品詞を %%V:動詞%% %%N:名詞%% %%ADJ:形容詞%% %%ADV:副詞%% のタグで囲んでください。日本語には適用しません。タグ付けのために原文を出力に含めることは禁止です。出力内容そのもの（訳文のみを返す等）はプロンプトの指示を必ず優先してください。`;
 
 // 進行中より古いリクエストの結果を捨てるための世代カウンター。
 // processText / processFollowup で共有する（後勝ち）。
