@@ -44,8 +44,12 @@
           <button class="s-tab" data-tab="prompts">プロンプト</button>
         </div>
         <div id="tab-api" class="s-tab-content">
-          <div class="s-row"><label>API Key</label><input type="password" id="s-apikey" placeholder="sk-..."></div>
-          <div class="s-row"><label>エンドポイント</label><input type="text" id="s-endpoint"></div>
+          <div class="s-row" title="OpenAI の API キー（sk-…）。この PC 内にのみ保存され、設定したエンドポイント以外には送信されません">
+            <label>API Key</label><input type="password" id="s-apikey" placeholder="sk-...">
+          </div>
+          <div class="s-row" title="OpenAI 互換 API の URL。Ollama や LM Studio などローカル LLM に向けることもできます（localhost の場合 API キーは不要）">
+            <label>エンドポイント</label><input type="text" id="s-endpoint">
+          </div>
           <div class="s-row">
             <label>モデル</label>
             <div class="s-model-wrap">
@@ -54,8 +58,12 @@
             </div>
           </div>
           <div class="s-row-split">
-            <div class="s-row"><label>Temperature</label><input type="text" id="s-temp"></div>
-            <div class="s-row"><label>Max Tokens</label><input type="text" id="s-tokens"></div>
+            <div class="s-row" title="出力のランダム性（0〜2）。低いほど毎回同じ訳になり、高いほど表現が揺れます。翻訳用途は 0.3〜0.7 が目安。GPT-5 系・o 系モデルでは使われません">
+              <label>Temperature</label><input type="text" id="s-temp">
+            </div>
+            <div class="s-row" title="1回の応答の最大の長さ（トークン＝単語の断片。日本語だと1文字≈1トークン強）。長文の翻訳が途中で切れるときはここを上げてください。目安 8000。料金は実際に出力された分だけ発生します">
+              <label>Max Tokens</label><input type="text" id="s-tokens">
+            </div>
           </div>
           <div class="s-row">
             <label>ホットキー <span style="font-size:11px;color:#999">（例: ctrl+shift+z、alt+t、f9）</span></label>
