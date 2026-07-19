@@ -13,6 +13,10 @@
 !.github/**
 !LICENSE
 
+# Docs assets (README demo GIF etc.)
+!docs/
+!docs/**
+
 # Frontend source
 !src/
 !src/**
