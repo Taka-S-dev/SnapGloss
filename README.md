@@ -37,13 +37,35 @@
 
 ---
 
-## セットアップ
+## インストール
+
+[**最新リリース**](https://github.com/Taka-S-dev/SnapGloss/releases/latest) からダウンロードできます：
+
+| ファイル | 用途 |
+|---|---|
+| `snap-gloss_x.x.x_x64-setup.exe` | インストーラー（**推奨**。WebView2 未搭載環境も自動対応） |
+| `snap-gloss_vx.x.x_x64_portable.exe` | インストール不要の単体版 |
+
+動作環境は Windows 10/11。初回起動時に SmartScreen の警告が出た場合は「詳細情報」→「実行」で起動できます（コード署名を行っていないため）。
+
+### 初期設定
+
+1. 右上の ⚙ から設定を開く
+2. OpenAI API キーを入力して保存
+3. テキストを選択してホットキーを押す（デフォルト: `Ctrl+Shift+Z`）
+
+ホットキー・モデル・テーマ等は設定から変更できます。Ollama 等のローカル LLM を使う場合はエンドポイントを変更すれば API キー不要で動作します。
+
+設定とプロンプトは `%APPDATA%\com.snapgloss.app\settings.json`、API キーは同フォルダの `apikey` に保存されます。ブラウザからは読み取れません。
+
+---
+
+## 開発（ソースからビルド）
 
 ### 必要環境
 
 - [Rust](https://rustup.rs/) (stable)
 - [Node.js](https://nodejs.org/) 18+
-- Windows 10/11
 - OpenAI API キー（または互換 API）
 
 ### 起動
@@ -60,16 +82,6 @@ npm run tauri build
 ```
 
 インストーラーは `src-tauri/target/release/bundle/` に生成されます（`v*` タグの push で GitHub Actions が自動ビルドし、ドラフトリリースに添付します）。
-
-### 初期設定
-
-1. 右上の ⚙ から設定を開く
-2. API キーを入力して保存
-3. テキストを選択してホットキーを押す（デフォルト: `Ctrl+Shift+Z`）
-
-ホットキー・モデル・テーマ等は設定から変更できます。Ollama 等のローカル LLM を使う場合はエンドポイントを変更すれば API キー不要で動作します。
-
-設定とプロンプトは `%APPDATA%\com.snapgloss.app\settings.json`、API キーは同フォルダの `apikey` に保存されます。ブラウザからは読み取れません。
 
 ---
 
