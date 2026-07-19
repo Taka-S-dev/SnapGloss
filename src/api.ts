@@ -23,6 +23,21 @@ function httpErrorMessage(status: number, bodyText: string): string {
   return `APIエラー (HTTP ${status})${detail ? `: ${detail}` : hint ? `: ${hint}` : ""}`;
 }
 
+// 出力がトークン上限（Max Tokens）で打ち切られた場合の検知。
+// updateContent が通知欄をリセットするため、描画完了後にフラグを見て通知する
+let _truncated = false;
+function notifyTruncated() { _truncated = true; }
+function consumeTruncated(): boolean {
+  const t = _truncated;
+  _truncated = false;
+  return t;
+}
+function showTruncatedNotice() {
+  if (consumeTruncated()) {
+    showNotice("出力がトークン上限で途中打ち切りになりました。⚙ 設定の Max Tokens を上げると最後まで出力されます");
+  }
+}
+
 // reader.read() を無応答タイムアウト付きで待つ。
 // WebView2 では AbortController が不安定なため、タイマーとの race で確実に打ち切る。
 async function readWithTimeout<T>(read: Promise<T>, ms: number): Promise<T> {
@@ -43,6 +58,7 @@ async function readWithTimeout<T>(read: Promise<T>, ms: number): Promise<T> {
  * SSE 非対応のエンドポイントは通常の JSON レスポンスにフォールバックする。
  */
 export async function callApi(messages: Message[], onDelta?: (fullText: string) => void): Promise<string> {
+  _truncated = false;
   const s = loadSettings();
   const apiKey = await invoke<string>("get_api_key").catch(e => { throw new Error("APIキー読み取りエラー: " + e); });
   if (!apiKey) {
@@ -81,6 +97,7 @@ export async function callApi(messages: Message[], onDelta?: (fullText: string) 
     if (data.error) throw new Error(data.error.message);
     const content = data.choices?.[0]?.message.content;
     if (!content) throw new Error("レスポンスが空です");
+    if (data.choices?.[0]?.finish_reason === "length") notifyTruncated();
     onDelta?.(content);
     return content;
   }
@@ -105,6 +122,7 @@ export async function callApi(messages: Message[], onDelta?: (fullText: string) 
         const chunk = ChatCompletionChunkSchema.safeParse(json);
         if (!chunk.success) continue;
         if (chunk.data.error) throw new Error(chunk.data.error.message);
+        if (chunk.data.choices?.[0]?.finish_reason === "length") notifyTruncated();
         const delta = chunk.data.choices?.[0]?.delta?.content;
         if (delta) {
           full += delta;
@@ -177,6 +195,7 @@ export async function processText(text: string, modeName: string, prompt: string
     } else {
       updateContent(html, modeName);
       addHistory({ mode: modeName, prompt, input: text, result, ts: Date.now() });
+      showTruncatedNotice();
     }
   } catch (e) {
     if (isStale(gen)) return;
@@ -263,6 +282,7 @@ export async function processFollowup(followupText: string, mode: "qa" | "gramma
     ($("content") as HTMLElement).style.flex = `0 0 ${pct}%`;
     fc.scrollTop = fc.scrollHeight;
     $("error-box").style.display = "none";
+    showTruncatedNotice();
   } catch (e) {
     if (isStale(gen)) return;
     showError(String(e));

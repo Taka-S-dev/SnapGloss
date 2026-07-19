@@ -6,6 +6,7 @@ export interface Message { role: "system" | "user" | "assistant"; content: strin
 export const ChatCompletionSchema = z.object({
   choices: z.array(z.object({
     message: z.object({ content: z.string() }),
+    finish_reason: z.string().nullable().optional(),
   })).optional(),
   error: z.object({ message: z.string() }).optional(),
 });
@@ -15,6 +16,7 @@ export type ChatCompletion = z.infer<typeof ChatCompletionSchema>;
 export const ChatCompletionChunkSchema = z.object({
   choices: z.array(z.object({
     delta: z.object({ content: z.string().optional() }).optional(),
+    finish_reason: z.string().nullable().optional(),
   })).optional(),
   error: z.object({ message: z.string() }).optional(),
 });
