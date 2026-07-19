@@ -145,6 +145,8 @@
 /* ── ベース ──────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo', sans-serif; font-size: 14px; }
+/* ネイティブのドロップダウン項目もテーマ色で描く（未指定だとダークで白飛びする） */
+select option { background: var(--bg-panel); color: var(--text); }
 
 #loading-bar {
   display: none; position: fixed; top: 0; left: 0; right: 0; height: 3px;
