@@ -163,6 +163,87 @@ fn move_window_to_cursor(app: &AppHandle, win: &tauri::WebviewWindow) {
     let _ = win.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
 }
 
+// ── クリップボードの HTML フレーバー読み取り ────────────────────────────────
+// ブラウザからのコピーはプレーンテキストだと箇条書き・見出しの構造が失われる。
+// CF_HTML が存在する場合は Markdown に変換して構造を保つ（Obsidian の貼り付けと同じ発想）。
+
+#[cfg(target_os = "windows")]
+fn read_clipboard_html() -> Option<String> {
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
+        RegisterClipboardFormatW,
+    };
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+
+    let name: Vec<u16> = "HTML Format\0".encode_utf16().collect();
+    unsafe {
+        let fmt = RegisterClipboardFormatW(name.as_ptr());
+        if fmt == 0 || IsClipboardFormatAvailable(fmt) == 0 {
+            return None;
+        }
+        if OpenClipboard(0) == 0 {
+            return None;
+        }
+        let handle = GetClipboardData(fmt);
+        if handle == 0 {
+            CloseClipboard();
+            return None;
+        }
+        let mem = handle as *mut core::ffi::c_void;
+        let ptr = GlobalLock(mem) as *const u8;
+        if ptr.is_null() {
+            CloseClipboard();
+            return None;
+        }
+        let size = GlobalSize(mem);
+        let bytes = std::slice::from_raw_parts(ptr, size).to_vec();
+        GlobalUnlock(mem);
+        CloseClipboard();
+
+        let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+        let raw = String::from_utf8_lossy(&bytes[..end]).into_owned();
+        extract_cf_html_fragment(&raw)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn read_clipboard_html() -> Option<String> {
+    None
+}
+
+// CF_HTML のヘッダ（StartFragment/EndFragment のバイトオフセット）から本体を取り出す
+fn extract_cf_html_fragment(raw: &str) -> Option<String> {
+    let num = |key: &str| {
+        raw.lines()
+            .find_map(|l| l.strip_prefix(key))
+            .and_then(|v| v.trim().parse::<usize>().ok())
+    };
+    if let (Some(s), Some(e)) = (num("StartFragment:"), num("EndFragment:")) {
+        if s < e && e <= raw.len() {
+            if let Some(frag) = raw.get(s..e) {
+                return Some(frag.to_string());
+            }
+        }
+    }
+    // オフセットが壊れている場合はコメントマーカーで代用
+    const START: &str = "<!--StartFragment-->";
+    const END: &str = "<!--EndFragment-->";
+    let s = raw.find(START).map(|i| i + START.len())?;
+    let e = raw.find(END)?;
+    (s <= e).then(|| raw[s..e].to_string())
+}
+
+/// クリップボードの HTML を Markdown に変換する。HTML がなければ None
+fn clipboard_html_as_markdown() -> Option<String> {
+    let html = read_clipboard_html()?;
+    let md = html2md::parse_html(&html);
+    // レンダラーが対応しないリンク・画像はテキストだけ残す
+    let md = regex::Regex::new(r"!\[[^\]]*\]\([^)]*\)").ok()?.replace_all(&md, "");
+    let md = regex::Regex::new(r"\[([^\]]*)\]\([^)]*\)").ok()?.replace_all(&md, "$1");
+    let md = md.trim().to_string();
+    (!md.is_empty()).then_some(md)
+}
+
 fn hotkey_handler(app: &AppHandle, safe_to_copy: bool) {
     let app = app.clone();
     thread::spawn(move || {
@@ -181,12 +262,14 @@ fn hotkey_handler(app: &AppHandle, safe_to_copy: bool) {
             }
             thread::sleep(Duration::from_millis(150));
             let copied = app.clipboard().read_text().ok().unwrap_or_default();
+            // 元のクリップボードを復元する前に HTML フレーバーを読む
+            let structured = clipboard_html_as_markdown();
             if !prev_clipboard.is_empty() && prev_clipboard != copied {
                 let _ = app.clipboard().write_text(prev_clipboard.clone());
             }
-            copied
+            structured.unwrap_or(copied)
         } else {
-            prev_clipboard
+            clipboard_html_as_markdown().unwrap_or(prev_clipboard)
         };
 
         if let Some(win) = app.get_webview_window("main") {
