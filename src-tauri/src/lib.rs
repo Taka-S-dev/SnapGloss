@@ -235,13 +235,51 @@ fn extract_cf_html_fragment(raw: &str) -> Option<String> {
 
 /// クリップボードの HTML を Markdown に変換する。HTML がなければ None
 fn clipboard_html_as_markdown() -> Option<String> {
-    let html = read_clipboard_html()?;
+    html_to_markdown(&read_clipboard_html()?)
+}
+
+fn html_to_markdown(html: &str) -> Option<String> {
+    // Wikipedia 等の脚注 <sup>[1]</sup> は本文ではない上、属性が巨大なので変換前に丸ごと落とす
+    let html = regex::Regex::new(r"(?is)<sup\b[^>]*>.*?</sup>")
+        .ok()?
+        .replace_all(html, "");
     let md = html2md::parse_html(&html);
     // レンダラーが対応しないリンク・画像はテキストだけ残す
     let md = regex::Regex::new(r"!\[[^\]]*\]\([^)]*\)").ok()?.replace_all(&md, "");
     let md = regex::Regex::new(r"\[([^\]]*)\]\([^)]*\)").ok()?.replace_all(&md, "$1");
+    // html2md が未対応タグ（span 等）を生のまま素通しするので、残った HTML タグを除去する
+    let md = regex::Regex::new(r"(?s)</?[a-zA-Z][a-zA-Z0-9-]*(\s[^>]*)?>")
+        .ok()?
+        .replace_all(&md, "");
     let md = md.trim().to_string();
     (!md.is_empty()).then_some(md)
+}
+
+#[cfg(test)]
+mod html_to_markdown_tests {
+    use super::html_to_markdown;
+
+    #[test]
+    fn strips_wikipedia_footnote_sups() {
+        let html = r##"<b>Mount Fuji</b><sup about="#mwt39" class="mw-ref reference" data-mw="{&quot;name&quot;:&quot;ref&quot;}" style="line-height: 1;"><a href="https://en.wikipedia.org/wiki/Mount_Fuji#cite_note-5"><span class="mw-reflink-text">[a]</span></a></sup> is an active <a href="https://en.wikipedia.org/wiki/Stratovolcano">stratovolcano</a>."##;
+        let md = html_to_markdown(html).unwrap();
+        assert!(!md.contains('<'), "生タグが残っている: {md}");
+        assert!(!md.contains("[a]"), "脚注が残っている: {md}");
+        assert!(md.contains("**Mount Fuji**"));
+        assert!(md.contains("stratovolcano"));
+    }
+
+    #[test]
+    fn strips_passthrough_span_tags() {
+        let html = r#"<p>Hello <span style="color: red;">world</span></p>"#;
+        let md = html_to_markdown(html).unwrap();
+        assert_eq!(md, "Hello world");
+    }
+
+    #[test]
+    fn empty_html_returns_none() {
+        assert_eq!(html_to_markdown(""), None);
+    }
 }
 
 fn hotkey_handler(app: &AppHandle, safe_to_copy: bool) {
