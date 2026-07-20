@@ -165,6 +165,12 @@ export async function processText(text: string, modeName: string, prompt: string
   }
   state.lastCall = { text, modeName, prompt };
   $("retry-box").style.display = "none";
+  // 前回の会話のフォローアップ表示は新しい翻訳の開始時点で消す
+  // （updateContent は完了時にしか呼ばれず、ストリーミング中に残ってしまうため）
+  clearHighlights();
+  $("content-followup").innerHTML = "";
+  $("wrapper").classList.remove("split");
+  ($("content") as HTMLElement).style.flex = "";
   const renderPartial = makeStreamRenderer(html => {
     const c = $("content");
     c.style.fontSize = state.fontSize + "px";
