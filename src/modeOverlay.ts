@@ -3,7 +3,8 @@ import { loadSettings } from "./settings";
 import { $, setLoading, enterChatMode } from "./ui";
 import { processText } from "./api";
 
-let _filteredPrompts: Prompt[] = [];
+interface ModeItem { p: Prompt; num: number; }
+let _filteredItems: ModeItem[] = [];
 let _activeIdx = 0;
 
 // AI チャットは通常モードとは別枠（リスト下の固定行と Tab キー）から入る
@@ -12,27 +13,36 @@ function startChat() {
   enterChatMode();
 }
 
+// 全角英数字を半角に寄せる（IME オンのまま数字や英字を打ったケースの救済）
+function normalizeQuery(query: string): string {
+  return query
+    .replace(/[０-９ａ-ｚＡ-Ｚ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .toLowerCase()
+    .trim();
+}
+
 function renderFilteredList(query: string) {
   const s = loadSettings();
-  const q = query.toLowerCase();
-  _filteredPrompts = q
-    ? s.prompts.filter(p => p.name.toLowerCase().includes(q))
-    : [...s.prompts];
-  _activeIdx = Math.min(_activeIdx, Math.max(_filteredPrompts.length - 1, 0));
+  const q = normalizeQuery(query);
+  // 番号はフィルタ前の並び順で固定。数字クエリは番号の前方一致で絞り込む
+  const all = s.prompts.map((p, i) => ({ p, num: i + 1 }));
+  _filteredItems =
+    !q ? all :
+    /^\d+$/.test(q) ? all.filter(it => String(it.num).startsWith(q)) :
+    all.filter(it => it.p.name.toLowerCase().includes(q));
+  _activeIdx = Math.min(_activeIdx, Math.max(_filteredItems.length - 1, 0));
 
   const list = $("mo-list");
   list.innerHTML = "";
-  _filteredPrompts.forEach((p, i) => {
+  _filteredItems.forEach((it, i) => {
     const btn = document.createElement("button");
-    if (i < 9) {
-      const num = document.createElement("span");
-      num.className = "mo-num";
-      num.textContent = String(i + 1);
-      btn.appendChild(num);
-    }
-    btn.appendChild(document.createTextNode(p.name));
+    const num = document.createElement("span");
+    num.className = "mo-num";
+    num.textContent = String(it.num);
+    btn.appendChild(num);
+    btn.appendChild(document.createTextNode(it.p.name));
     btn.classList.toggle("active", i === _activeIdx);
-    btn.onclick = () => selectMode(p.name, p.text);
+    btn.onclick = () => selectMode(it.p.name, it.p.text);
     btn.addEventListener("mouseenter", () => { _activeIdx = i; updateActiveBtn(); });
     list.appendChild(btn);
   });
@@ -137,19 +147,32 @@ export function initModeOverlay() {
   ($("mo-text") as HTMLTextAreaElement).addEventListener("keydown", e => {
     if (e.key === "Enter" && e.ctrlKey) {
       e.preventDefault();
-      const p = _filteredPrompts[_activeIdx];
-      if (p) selectMode(p.name, p.text);
+      const it = _filteredItems[_activeIdx];
+      if (it) selectMode(it.p.name, it.p.text);
     }
   });
+  // 番号入力が1件に絞れたら即実行（9個以下なら1桁で決まるので従来の一発実行と同じ）。
+  // IME 変換中は確定前のテキストで暴発しないよう保留し、確定時に改めて判定する
+  const maybeRunByNumber = (raw: string) => {
+    const q = normalizeQuery(raw);
+    if (/^\d+$/.test(q) && _filteredItems.length === 1) {
+      const it = _filteredItems[0];
+      selectMode(it.p.name, it.p.text);
+    }
+  };
   ($("mo-search") as HTMLInputElement).addEventListener("input", e => {
     _activeIdx = 0;
-    renderFilteredList((e.target as HTMLInputElement).value);
+    const v = (e.target as HTMLInputElement).value;
+    renderFilteredList(v);
+    if (!(e as InputEvent).isComposing) maybeRunByNumber(v);
+  });
+  ($("mo-search") as HTMLInputElement).addEventListener("compositionend", e => {
+    maybeRunByNumber((e.target as HTMLInputElement).value);
   });
   ($("mo-search") as HTMLInputElement).addEventListener("keydown", e => {
-    const input = e.target as HTMLInputElement;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      _activeIdx = Math.min(_activeIdx + 1, _filteredPrompts.length - 1);
+      _activeIdx = Math.min(_activeIdx + 1, _filteredItems.length - 1);
       updateActiveBtn();
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
@@ -157,16 +180,12 @@ export function initModeOverlay() {
       updateActiveBtn();
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const p = _filteredPrompts[_activeIdx];
-      if (p) selectMode(p.name, p.text);
+      const it = _filteredItems[_activeIdx];
+      if (it) selectMode(it.p.name, it.p.text);
     } else if (e.key === "Tab") {
       // Tab で AI チャットに直行
       e.preventDefault();
       startChat();
-    } else if (/^[1-9]$/.test(e.key) && input.value === "") {
-      // 検索欄が空のときは数字キーで一発選択
-      const p = _filteredPrompts[parseInt(e.key) - 1];
-      if (p) { e.preventDefault(); selectMode(p.name, p.text); }
     }
   });
 }

@@ -234,8 +234,8 @@ select option { background: var(--bg-panel); color: var(--text); }
 #mo-list button:hover   { background: var(--bg-hover); }
 #mo-list button.active  { background: var(--accent); color: var(--on-accent); }
 .mo-num {
-  display: inline-block; width: 16px; height: 16px; line-height: 16px;
-  margin-right: 8px; border-radius: 4px; background: var(--bg-active);
+  display: inline-block; min-width: 16px; height: 16px; line-height: 16px;
+  padding: 0 2px; margin-right: 8px; border-radius: 4px; background: var(--bg-active);
   font-size: 10px; text-align: center; color: var(--text-3);
 }
 #mo-list button.active .mo-num { background: rgba(255,255,255,.25); color: var(--on-accent); }
