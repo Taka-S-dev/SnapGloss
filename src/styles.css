@@ -466,8 +466,9 @@ select option { background: var(--bg-panel); color: var(--text); }
 /* ── フォローアップ入力 ──────────────────────────────────────────────────── */
 #followup-area { display: none; border-top: 1px solid var(--border); padding: 8px 10px; gap: 6px; background: var(--bg-subtle); flex-shrink: 0; align-items: flex-end; }
 #followup-area.visible { display: flex; }
+/* 高さはコントロール共通の 32px に揃える（入力欄だけ複数行時に伸びる） */
 #followup-mode {
-  padding: 5px 6px; border: 1px solid var(--border-strong); border-radius: 4px;
+  height: 32px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 4px;
   font-size: 12px; font-family: inherit; outline: none; background: var(--bg-panel); color: var(--text);
   cursor: pointer; transition: border-color .15s; flex-shrink: 0;
 }
@@ -475,18 +476,18 @@ select option { background: var(--bg-panel); color: var(--text); }
 #followup-area.grammar-mode #followup-mode { border-color: var(--grammar); background: var(--grammar-bg); }
 #followup-area.grammar-mode #followup-input { border-color: var(--grammar); }
 #followup-input {
-  flex: 1; padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: 4px;
+  flex: 1; min-height: 32px; padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: 4px;
   font-size: 13px; font-family: inherit; outline: none; transition: border-color .15s;
   resize: none; overflow-y: auto; max-height: 120px; line-height: 1.5;
   background: var(--bg-panel); color: var(--text);
 }
 #followup-input:focus { border-color: var(--accent); }
 #followup-area.grammar-mode #followup-input:focus { border-color: var(--grammar); }
-#followup-send { padding: 5px 14px; border: none; border-radius: 4px; background: var(--accent); color: var(--on-accent); cursor: pointer; font-size: 13px; font-family: inherit; transition: background .15s; }
+#followup-send { height: 32px; padding: 0 14px; border: none; border-radius: 4px; background: var(--accent); color: var(--on-accent); cursor: pointer; font-size: 13px; font-family: inherit; transition: background .15s; }
 #followup-send:hover    { background: var(--accent-hover); }
 #followup-send:disabled { background: var(--border-strong); cursor: default; }
 #followup-clear {
-  display: none; padding: 5px 8px; border: none; border-radius: 4px;
+  display: none; height: 32px; padding: 0 8px; border: none; border-radius: 4px;
   background: transparent; color: var(--text-3); cursor: pointer;
   font-size: 13px; font-family: inherit; transition: background .15s, color .15s;
 }
