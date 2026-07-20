@@ -169,7 +169,7 @@ export async function processText(text: string, modeName: string, prompt: string
   // （updateContent は完了時にしか呼ばれず、ストリーミング中に残ってしまうため）
   clearHighlights();
   $("content-followup").innerHTML = "";
-  $("wrapper").classList.remove("split");
+  $("wrapper").classList.remove("split", "chat");
   ($("content") as HTMLElement).style.flex = "";
   const renderPartial = makeStreamRenderer(html => {
     const c = $("content");
@@ -226,17 +226,23 @@ const GRAMMAR_SYSTEM = `あなたは英語学習を支援する専門家です�
 - マークなしで語句を引用することは禁止です
 - ただしコードブロックや mermaid 図の内部では %%HL%% を使わないでください`;
 
-// 原文＋メイン結果（先頭2件）は必ず残し、フォローアップ部分だけ直近分に丸める
-function trimmedHistory(): Message[] {
-  const h = state.conv.history;
-  if (h.length <= 2 + FOLLOWUP_HISTORY_MAX) return h;
-  return [...h.slice(0, 2), ...h.slice(-FOLLOWUP_HISTORY_MAX)];
+// 履歴の先頭にある文脈エントリ数。翻訳経由なら原文＋メイン結果の2件、チャットモードは0件
+function contextLen(): number {
+  return state.conv.inputText ? 2 : 0;
 }
 
-// 過去のフォローアップ（原文＋メイン結果を除く）をスレッド形式の HTML にする
+// 文脈エントリは必ず残し、フォローアップ部分だけ直近分に丸める
+function trimmedHistory(): Message[] {
+  const h = state.conv.history;
+  const ctx = contextLen();
+  if (h.length <= ctx + FOLLOWUP_HISTORY_MAX) return h;
+  return [...h.slice(0, ctx), ...h.slice(-FOLLOWUP_HISTORY_MAX)];
+}
+
+// 過去のフォローアップ（文脈エントリを除く）をスレッド形式の HTML にする
 function followupThreadHtml(): string {
   const parts: string[] = [];
-  const fups = state.conv.history.slice(2);
+  const fups = state.conv.history.slice(contextLen());
   for (let i = 0; i < fups.length; i += 2) {
     const q = fups[i], a = fups[i + 1];
     if (q) parts.push(`<div class="fu-q">${he(q.content)}</div>`);
@@ -276,6 +282,8 @@ export async function processFollowup(followupText: string, mode: "qa" | "gramma
       { role: "assistant", content: result },
     );
     state.conv.lastResult = result;
+    // チャットモードではメイン結果がないので、コピー対象は最新の回答にする
+    if (!state.conv.inputText) state.rawText = result;
 
     const highlights = extractTagValues(result, "HL");
     if (highlights.length) highlightInContent(highlights);

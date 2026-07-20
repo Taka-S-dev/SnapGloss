@@ -30,7 +30,9 @@ function showCopyFeedback() {
 function submitFollowup() {
   const input = $("followup-input") as HTMLTextAreaElement;
   const text = input.value.trim();
-  if (!text || !state.conv.lastResult) return;
+  // チャットモードは翻訳結果（lastResult）なしで会話を始められる
+  if (!text) return;
+  if (!state.conv.lastResult && state.conv.mode !== "チャット") return;
   const mode = ($("followup-mode") as HTMLSelectElement).value as "qa" | "grammar";
   input.value = "";
   input.style.height = "auto";

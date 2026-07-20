@@ -1,10 +1,16 @@
 import { type Prompt } from "./state";
 import { loadSettings } from "./settings";
-import { $, setLoading } from "./ui";
+import { $, setLoading, enterChatMode } from "./ui";
 import { processText } from "./api";
 
 let _filteredPrompts: Prompt[] = [];
 let _activeIdx = 0;
+
+// AI チャットは通常モードとは別枠（リスト下の固定行と Tab キー）から入る
+function startChat() {
+  closeModeOverlay();
+  enterChatMode();
+}
 
 function renderFilteredList(query: string) {
   const s = loadSettings();
@@ -120,6 +126,7 @@ export function initModeOverlay() {
   $("mode-overlay").addEventListener("click", e => {
     if (e.target === $("mode-overlay")) closeModeOverlay();
   });
+  $("mo-chat").addEventListener("click", startChat);
   // ✕：テキストを消して質問などを打ち込むための導線
   $("mo-clear").addEventListener("click", () => {
     const ta = $("mo-text") as HTMLTextAreaElement;
@@ -152,6 +159,10 @@ export function initModeOverlay() {
       e.preventDefault();
       const p = _filteredPrompts[_activeIdx];
       if (p) selectMode(p.name, p.text);
+    } else if (e.key === "Tab") {
+      // Tab で AI チャットに直行
+      e.preventDefault();
+      startChat();
     } else if (/^[1-9]$/.test(e.key) && input.value === "") {
       // 検索欄が空のときは数字キーで一発選択
       const p = _filteredPrompts[parseInt(e.key) - 1];

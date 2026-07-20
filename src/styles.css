@@ -239,6 +239,20 @@ select option { background: var(--bg-panel); color: var(--text); }
   font-size: 10px; text-align: center; color: var(--text-3);
 }
 #mo-list button.active .mo-num { background: rgba(255,255,255,.25); color: var(--on-accent); }
+/* AI チャット：モード一覧とは別枠の固定行 */
+#mo-chat {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px; border: none; border-top: 1px solid var(--border);
+  border-radius: 0 0 6px 6px; background: transparent; cursor: pointer;
+  font-size: 13px; font-family: inherit; color: var(--text-2); text-align: left;
+  transition: background .1s, color .1s;
+}
+#mo-chat:hover { background: var(--bg-hover); color: var(--text); }
+.mo-chat-label { display: flex; align-items: center; gap: 8px; }
+.mo-key {
+  font-size: 10px; color: var(--text-4);
+  border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 6px;
+}
 
 /* ── 履歴オーバーレイ ────────────────────────────────────────────────────── */
 #history-overlay {
@@ -406,6 +420,12 @@ select option { background: var(--bg-panel); color: var(--text); }
 #wrapper.split #content { flex: 0 0 55%; min-height: 60px; }
 #wrapper.split #pane-sep { display: block; }
 #wrapper.split #content-followup { display: block; flex: 1 1 0; min-height: 60px; }
+/* チャットモード：メインペインを畳んでスレッドを全画面にする（.split より後に置いて上書き） */
+#wrapper.chat #content { display: none; }
+#wrapper.chat #pane-sep { display: none; }
+#wrapper.chat #content-followup { display: block; flex: 1 1 0; }
+#wrapper.chat #followup-clear { display: block; }
+.chat-empty { color: var(--text-4); text-align: center; margin-top: 48px; font-size: 13px; }
 #content h1 { font-size: 1.25em; font-weight: 700; margin: 14px 0 6px; }
 #content h2 { font-size: 1.1em; font-weight: 700; margin: 12px 0 4px; }
 #content h3, #content-followup h3 { font-size: 1em; font-weight: 700; margin: 10px 0 3px; }

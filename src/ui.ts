@@ -52,7 +52,7 @@ export function updateContent(html: string, mode: string) {
   $("error-box").style.display = "none";
   $("notice").style.display = "none";
   $("followup-area").classList.add("visible");
-  $("wrapper").classList.remove("split");
+  $("wrapper").classList.remove("split", "chat");
   c.style.flex = "";
   $("content-followup").innerHTML = "";
   // ボタン自体の textContent を書き換えるとアイコンとラベル要素が消えるので、ラベルだけ戻す
@@ -71,21 +71,44 @@ export function resetContent(hotkeyStr = "ctrl+shift+z") {
   const hotkey = hotkeyStr.toUpperCase().replace(/\+/g, " + ");
   $("content").innerHTML = `<div id="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>テキストを選択して ${hotkey} を押すと処理されます</div>`;
   $("content-followup").innerHTML = "";
-  $("wrapper").classList.remove("split");
+  $("wrapper").classList.remove("split", "chat");
   ($("content") as HTMLElement).style.flex = "";
   $("followup-area").classList.remove("visible");
   $("error-box").style.display = "none";
   $("mode-label").textContent = "";
 }
 
+const CHAT_EMPTY_HINT = `<div class="chat-empty">質問を入力して Enter で送信</div>`;
+
+/** 翻訳文脈なしの AI チャット画面に切り替える（スレッドペインを全画面にする） */
+export function enterChatMode() {
+  state.rawText = "";
+  state.conv = { prompt: "", inputText: "", lastResult: "", mode: "チャット", history: [] };
+  clearHighlights();
+  $("content").innerHTML = "";
+  $("content-followup").innerHTML = CHAT_EMPTY_HINT;
+  $("wrapper").classList.remove("split");
+  $("wrapper").classList.add("chat");
+  ($("content") as HTMLElement).style.flex = "";
+  $("mode-label").textContent = "チャット";
+  $("error-box").style.display = "none";
+  $("followup-area").classList.add("visible");
+  const fi = $("followup-input") as HTMLTextAreaElement;
+  fi.value = "";
+  fi.style.height = "auto";
+  setTimeout(() => fi.focus(), 50);
+}
+
 /** フォローアップの会話だけをリセットする（メイン結果と原文の文脈は残す） */
 export function clearFollowupThread() {
   const h = state.conv.history;
   if (h.length === 0) return;
-  state.conv.history = h.slice(0, 2);
-  if (h[1]) state.conv.lastResult = h[1].content;
+  // チャットモード（原文なし）は履歴の先頭2件が文脈ではないので全消しする
+  const ctx = state.conv.inputText ? 2 : 0;
+  state.conv.history = h.slice(0, ctx);
+  state.conv.lastResult = ctx && h[1] ? h[1].content : "";
   clearHighlights();
-  $("content-followup").innerHTML = "";
+  $("content-followup").innerHTML = ctx ? "" : CHAT_EMPTY_HINT;
   $("wrapper").classList.remove("split");
   ($("content") as HTMLElement).style.flex = "";
   ($("followup-input") as HTMLTextAreaElement).focus();
