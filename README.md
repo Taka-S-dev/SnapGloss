@@ -83,6 +83,19 @@ npm run tauri build
 
 インストーラーは `src-tauri/target/release/bundle/` に生成されます（`v*` タグの push で GitHub Actions が自動ビルドし、ドラフトリリースに添付します）。
 
+### ホットキー取得の診断ログ
+
+環境変数 `SNAPGLOSS_DEBUG` を設定して起動すると、ホットキー 1 回ごとの取得結果を
+`%TEMP%\snapgloss-hotkey.log` に追記します（未設定なら何も出力しません）。
+
+```powershell
+$env:SNAPGLOSS_DEBUG = "1"; .\snap-gloss.exe
+```
+
+「選択したのにテキストが入らない」類の切り分け用です。前景アプリ名、修飾キーが離れたか、
+クリップボードが実際に書き換わったか、何文字取得できたかが 1 行ずつ残ります。
+コピー完了までの所要時間はアプリやリモートデスクトップ環境によって大きく異なります。
+
 ---
 
 ## 基本操作

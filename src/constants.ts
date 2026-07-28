@@ -12,3 +12,4 @@ export const NOTICE_DURATION_MS = 4000;
 export const FOLLOWUP_HISTORY_MAX = 12;      // フォローアップ文脈に含める直近メッセージ数（原文＋メイン結果は別枠）
 export const STREAM_RENDER_INTERVAL_MS = 80; // ストリーミング中の再描画間隔
 export const HISTORY_MAX = 20;               // 保存する履歴件数
+export const PENDING_INDICATOR_DELAY_MS = 150; // 選択範囲の取得中表示を出すまでの猶予（速い取得でちらつかせない）

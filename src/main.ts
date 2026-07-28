@@ -8,7 +8,8 @@ import { loadSettings, initSettings } from "./settings";
 import { FONT_BASE, FONT_MIN, FONT_MAX, PANE_MIN_HEIGHT, COPY_FEEDBACK_MS, FONT_INDICATOR_MS } from "./constants";
 import { $, setLoading, resetContent, clearFollowupThread } from "./ui";
 import { openSettings, closeSettings, initSettingsModal, applyTheme } from "./settings";
-import { showModeOverlay, closeModeOverlay, initModeOverlay, runLastMode, runPrompt, resolveAutoRunPrompt } from "./modeOverlay";
+import { showModeOverlay, closeModeOverlay, initModeOverlay, runLastMode, runPrompt, resolveAutoRunPrompt,
+         setModePending, isModePending, fillPendingText, consumePendingCancel } from "./modeOverlay";
 import { initWordTooltip } from "./tooltip";
 import { initContextMenu, showContextMenu } from "./contextMenu";
 import { processFollowup, processText } from "./api";
@@ -75,7 +76,33 @@ async function init() {
   // 「自動」のとき OS のテーマ切替に即追従する
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
+  // 元アプリがコピーを始めた合図。テキストが読めるまで 1 秒以上かかることがあるので、
+  // 先にオーバーレイを開いて取得中であることを見せる
+  await listen("hotkey-pending", () => {
+    if ($("mode-overlay").classList.contains("open")) return;
+    if ($("settings-overlay").classList.contains("open")) closeSettings();
+    if (isHistoryOpen()) closeHistory();
+    showModeOverlay("");
+    setModePending(true);
+  });
+
   await listen<string>("hotkey-fired", event => {
+    // 取得を待っている間に閉じられていたら、遅れて届いたテキストで開き直さない
+    if (consumePendingCancel()) return;
+
+    if (isModePending()) {
+      // 取得できなかった（選択なし・コピー失敗）ときは、空欄のまま手入力を待つ
+      if (!event.payload.trim()) { setModePending(false); return; }
+      const auto = resolveAutoRunPrompt(loadSettings().autoRun);
+      if (auto) {
+        setModePending(false);
+        runPrompt(event.payload, auto);
+        return;
+      }
+      fillPendingText(event.payload);
+      return;
+    }
+
     // オーバーレイ表示中にもう一度ホットキー → 前回モードで即実行
     if ($("mode-overlay").classList.contains("open")) {
       runLastMode(event.payload);

@@ -2,7 +2,7 @@ use enigo::{
     Direction::{Click, Press, Release},
     Enigo, Key, Keyboard, Settings,
 };
-use std::{thread, time::Duration};
+use std::{thread, time::{Duration, Instant}};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -282,59 +282,237 @@ mod html_to_markdown_tests {
     }
 }
 
-fn hotkey_handler(app: &AppHandle, safe_to_copy: bool) {
+/// 環境変数 SNAPGLOSS_DEBUG が設定されているときだけ、一時ディレクトリの
+/// snapgloss-hotkey.log に 1 行追記する。未設定なら何もしない。
+/// ホットキー処理は他アプリのウィンドウが前面にある状態で走るため、
+/// 対話的に観察できない。何が起きたかを残す手段がこれしかない。
+fn debug_log(line: &str) {
+    if std::env::var_os("SNAPGLOSS_DEBUG").is_none() { return; }
+    use std::io::Write;
+    let path = std::env::temp_dir().join("snapgloss-hotkey.log");
+    let elapsed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "[{elapsed}] {line}");
+    }
+}
+
+/// 修飾キー（Ctrl / Shift / Alt / Win）がすべて物理的に離されるまで待つ。
+/// 離れたら true、タイムアウトしたら false。
+///
+/// ホットキーの修飾キーが押されたままだと、送った Ctrl+C が Ctrl+Alt+C 等になり
+/// コピーが成立しない。Alt を含むホットキー（Alt+T など）で顕著。
+#[cfg(target_os = "windows")]
+fn wait_for_modifiers_released(timeout: Duration) -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+    };
+    const KEYS: [i32; 5] = [
+        VK_CONTROL as i32, VK_SHIFT as i32, VK_MENU as i32, VK_LWIN as i32, VK_RWIN as i32,
+    ];
+    let deadline = Instant::now() + timeout;
+    loop {
+        let held = unsafe { KEYS.iter().any(|&k| GetAsyncKeyState(k) as u16 & 0x8000 != 0) };
+        if !held { return true; }
+        if Instant::now() >= deadline { return false; }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn wait_for_modifiers_released(_timeout: Duration) -> bool { false }
+
+#[cfg(target_os = "windows")]
+fn clipboard_sequence() -> u32 {
+    use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
+    unsafe { GetClipboardSequenceNumber() }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn clipboard_sequence() -> u32 { 0 }
+
+#[cfg(target_os = "windows")]
+fn clipboard_changed_since(before: u32) -> bool { clipboard_sequence() != before }
+
+#[cfg(not(target_os = "windows"))]
+fn clipboard_changed_since(_before: u32) -> bool { true }
+
+/// コピーが成立してテキストが実際に読めるようになるまで待つ。読めたら Some。
+///
+/// シーケンス番号は EmptyClipboard() の時点で増えるので、「番号が変わった＝データが読める」
+/// ではない。番号を合図に読みにいくと、コピー処理の最中に割り込んで空文字を掴む
+/// （Fork のように書き込みフォーマットが多いアプリで顕著）。
+/// 他プロセスがクリップボードをロックしている間は読み取り自体も失敗するため、
+/// どちらの場合も「テキストが取れるまで粘る」で吸収する。
+///
+/// 番号が動いた（＝元アプリがコピーを始めた）瞬間に `on_copy_started` を一度だけ呼ぶ。
+/// 読めるまで 1 秒以上かかることがあり、その間 UI が無反応に見えるのを避けるための合図。
+fn wait_for_copied_text(
+    app: &AppHandle,
+    before: u32,
+    timeout: Duration,
+    mut on_copy_started: impl FnMut(),
+) -> Option<String> {
+    let deadline = Instant::now() + timeout;
+    let mut notified = false;
+    loop {
+        if clipboard_changed_since(before) {
+            if !notified {
+                notified = true;
+                on_copy_started();
+            }
+            if let Ok(t) = app.clipboard().read_text() {
+                if !t.is_empty() { return Some(t); }
+            }
+        }
+        if Instant::now() >= deadline { return None; }
+        thread::sleep(Duration::from_millis(25));
+    }
+}
+
+/// コピー結果から表示に使うテキストを決める。
+/// コピーが成立しなかったときに古いクリップボード内容へフォールバックしないのが要点
+/// （失敗が「関係ない古い文章の表示」として現れるのを防ぐ）。
+fn decide_text(copied: String, html_md: Option<String>, changed: bool) -> String {
+    if !changed { return String::new(); }
+    html_md.unwrap_or(copied)
+}
+
+#[cfg(test)]
+mod decide_text_tests {
+    use super::decide_text;
+
+    #[test]
+    fn prefers_html_flavor_when_copy_succeeded() {
+        let t = decide_text("plain".into(), Some("**md**".into()), true);
+        assert_eq!(t, "**md**");
+    }
+
+    #[test]
+    fn falls_back_to_plain_text_when_no_html_flavor() {
+        let t = decide_text("plain".into(), None, true);
+        assert_eq!(t, "plain");
+    }
+
+    #[test]
+    fn returns_empty_when_copy_did_not_happen() {
+        // 古い HTML フレーバーが残っていても採用しない
+        let t = decide_text("stale".into(), Some("**stale md**".into()), false);
+        assert_eq!(t, "");
+    }
+}
+
+/// ウィンドウをカーソル位置に出す。多重呼び出しを避けるため呼び出し側で一度だけ呼ぶこと
+fn show_main_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+    let win = app.get_webview_window("main")?;
+    move_window_to_cursor(app, &win);
+    let _ = win.unminimize();
+    let _ = win.show();
+    let _ = win.set_focus();
+    Some(win)
+}
+
+/// ホットキー時に何をするか
+#[derive(Clone, Copy, PartialEq)]
+enum Capture {
+    /// 前景アプリに Ctrl+C を送って選択範囲を取る（通常）
+    SendCopy,
+    /// Ctrl+C は送らず、現在のクリップボードを使う（ターミナル等、送ると危険な前景アプリ）
+    ClipboardOnly,
+    /// 何も取らない（SnapGloss 自身が前景。自分に Ctrl+C を送っても意味がなく、
+    /// 番号が動かないぶんタイムアウトまで待たされるだけになる）
+    Skip,
+}
+
+fn hotkey_handler(app: &AppHandle, mode: Capture) {
     let app = app.clone();
     thread::spawn(move || {
         let prev_clipboard = app.clipboard().read_text().ok().unwrap_or_default();
 
-        let text = if safe_to_copy {
-            thread::sleep(Duration::from_millis(100));
+        debug_log(&format!(
+            "hotkey fired: mode={} foreground={} prev_clipboard_len={}",
+            match mode { Capture::SendCopy => "send_copy", Capture::ClipboardOnly => "clipboard_only", Capture::Skip => "skip" },
+            foreground_process_name(), prev_clipboard.chars().count()
+        ));
+
+        // コピー開始を検知した時点でウィンドウを出す。取得完了まで 1 秒以上かかることがあり、
+        // それまで何も出ないと固まったように見える。Ctrl+C を送る前に出すと
+        // フォーカスを奪って前景アプリにキーが届かなくなるため、この順序でなければならない
+        let mut shown = false;
+        let show_pending = |app: &AppHandle, shown: &mut bool| {
+            if *shown { return; }
+            *shown = true;
+            if let Some(win) = show_main_window(app) {
+                let _ = win.emit("hotkey-pending", ());
+            }
+        };
+
+        let text = if mode == Capture::Skip {
+            String::new()
+        } else if mode == Capture::SendCopy {
+            let released = wait_for_modifiers_released(Duration::from_millis(400));
+            let before_seq = clipboard_sequence();
+            debug_log(&format!("modifiers_released={released} before_seq={before_seq}"));
+            let mut enigo_ok = false;
             if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
-                let _ = enigo.key(Key::Control, Release);
-                let _ = enigo.key(Key::Shift, Release);
-                let _ = enigo.key(Key::Alt, Release);
-                thread::sleep(Duration::from_millis(30));
+                enigo_ok = true;
+                // 離れるのを待ちきれなかったときだけ、合成 Release で状態をこじ開ける
+                if !released {
+                    let _ = enigo.key(Key::Control, Release);
+                    let _ = enigo.key(Key::Shift, Release);
+                    let _ = enigo.key(Key::Alt, Release);
+                    thread::sleep(Duration::from_millis(30));
+                }
                 let _ = enigo.key(Key::Control, Press);
                 let _ = enigo.key(Key::Unicode('c'), Click);
                 let _ = enigo.key(Key::Control, Release);
             }
-            thread::sleep(Duration::from_millis(150));
-            let copied = app.clipboard().read_text().ok().unwrap_or_default();
+            let copied = wait_for_copied_text(&app, before_seq, Duration::from_millis(1500), || {
+                show_pending(&app, &mut shown);
+            });
+            let changed = copied.is_some();
+            let copied = copied.unwrap_or_default();
             // 元のクリップボードを復元する前に HTML フレーバーを読む
-            let structured = clipboard_html_as_markdown();
-            if !prev_clipboard.is_empty() && prev_clipboard != copied {
+            let structured = if changed { clipboard_html_as_markdown() } else { None };
+            debug_log(&format!(
+                "enigo_ok={enigo_ok} changed={changed} after_seq={} copied_len={} html={}",
+                clipboard_sequence(), copied.chars().count(),
+                structured.as_ref().map(|s| s.chars().count() as i64).unwrap_or(-1)
+            ));
+            if changed && !prev_clipboard.is_empty() && prev_clipboard != copied {
                 let _ = app.clipboard().write_text(prev_clipboard.clone());
             }
-            structured.unwrap_or(copied)
+            decide_text(copied, structured, changed)
         } else {
             clipboard_html_as_markdown().unwrap_or(prev_clipboard)
         };
 
-        if let Some(win) = app.get_webview_window("main") {
-            move_window_to_cursor(&app, &win);
-            let _ = win.unminimize();
-            let _ = win.show();
-            let _ = win.set_focus();
+        // コピー開始を検知できていれば表示済み。それ以外（取得失敗・Skip・ClipboardOnly）はここで出す
+        let win = if shown { app.get_webview_window("main") } else { show_main_window(&app) };
+        if let Some(win) = win {
             let _ = win.emit("hotkey-fired", text);
         }
     });
 }
 
+/// 前景ウィンドウのプロセス名（小文字, 例 "fork.exe"）。取れなければ空文字
 #[cfg(target_os = "windows")]
-fn foreground_is_safe() -> bool {
+fn foreground_process_name() -> String {
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
     use windows_sys::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION};
     use windows_sys::Win32::Foundation::CloseHandle;
     unsafe {
         let hwnd = GetForegroundWindow();
-        if hwnd == 0 { return false; }
+        if hwnd == 0 { return String::new(); }
 
         let mut pid = 0u32;
         GetWindowThreadProcessId(hwnd, &mut pid);
-        if pid == 0 { return false; }
+        if pid == 0 { return String::new(); }
 
         let hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if hproc == 0 { return false; }
+        if hproc == 0 { return String::new(); }
 
         let mut buf = [0u16; 512];
         let mut size = 512u32;
@@ -342,8 +520,34 @@ fn foreground_is_safe() -> bool {
         CloseHandle(hproc);
 
         let path = String::from_utf16_lossy(&buf[..size as usize]);
-        let name = path.rsplit('\\').next().unwrap_or("").to_lowercase();
+        path.rsplit('\\').next().unwrap_or("").to_lowercase()
+    }
+}
 
+#[cfg(not(target_os = "windows"))]
+fn foreground_process_name() -> String { String::new() }
+
+/// 前景ウィンドウが SnapGloss 自身か
+#[cfg(target_os = "windows")]
+fn foreground_is_self() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd == 0 { return false; }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        pid == std::process::id()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn foreground_is_self() -> bool { false }
+
+#[cfg(target_os = "windows")]
+fn foreground_is_safe() -> bool {
+    let name = foreground_process_name();
+    if name.is_empty() { return false; }
+    {
         !matches!(name.as_str(),
             "windowsterminal.exe" | "wt.exe" | // Windows Terminal
             "powershell.exe" | "pwsh.exe"     | // PowerShell
@@ -382,7 +586,14 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        hotkey_handler(app, foreground_is_safe());
+                        let mode = if foreground_is_self() {
+                            Capture::Skip
+                        } else if foreground_is_safe() {
+                            Capture::SendCopy
+                        } else {
+                            Capture::ClipboardOnly
+                        };
+                        hotkey_handler(app, mode);
                     }
                 })
                 .build(),

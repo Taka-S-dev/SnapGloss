@@ -30,6 +30,10 @@
         <div class="mo-text-wrap">
           <textarea id="mo-text" placeholder="テキストを入力するか、選択した状態でホットキーを押してください（Ctrl+Enter で実行）" autocomplete="off" spellcheck="false"></textarea>
           <button id="mo-clear" title="クリアして質問を入力">✕</button>
+          <div id="mo-pending">
+            <span class="spinner"></span>
+            <span>選択範囲を取得しています…</span>
+          </div>
         </div>
         <input id="mo-search" type="text" placeholder="モードを検索… (↑↓/数字 で選択、Enter で実行、ホットキー再押下で前回モード)">
         <div id="mo-list"></div>

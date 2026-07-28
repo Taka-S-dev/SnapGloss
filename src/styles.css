@@ -203,6 +203,16 @@ select option { background: var(--bg-panel); color: var(--text); }
   box-shadow: 0 8px 40px rgba(0,0,0,.3); display: flex; flex-direction: column; gap: 12px;
 }
 .mo-text-wrap { position: relative; }
+/* 選択範囲の取得待ち。空欄と見分けがつかないと「取得に失敗した」と読めてしまうので、
+   入力欄そのものを覆って文言を置く。150ms 以上かかるときだけ出る（modeOverlay.ts） */
+#mo-pending {
+  display: none; position: absolute; inset: 1px; border-radius: 5px;
+  background: var(--bg-panel); align-items: center; justify-content: center; gap: 10px;
+  font-size: 12px; color: var(--text-3); -webkit-user-select: none; user-select: none;
+}
+#mo-pending .spinner { width: 16px; height: 16px; border-width: 2px; }
+#mode-box.pending #mo-pending { display: flex; }
+#mode-box.pending #mo-text { border-color: var(--accent); }
 #mo-text {
   width: 100%; padding: 8px 44px 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
   font-size: 13px; font-family: inherit; resize: vertical; min-height: 72px;

@@ -1,6 +1,7 @@
 import { type Prompt } from "./state";
 import { loadSettings } from "./settings";
 import { $, setLoading, enterChatMode } from "./ui";
+import { PENDING_INDICATOR_DELAY_MS } from "./constants";
 import { processText } from "./api";
 
 interface ModeItem { p: Prompt; num: number; }
@@ -90,7 +91,49 @@ export function runLastMode(text: string) {
   runPrompt(t, p);
 }
 
+// 選択範囲の取得待ち。Ctrl+C を送ってからテキストが読めるまで 1 秒以上かかることがあるので、
+// その間はオーバーレイを先に出してプログレスを見せる（ホットキーが効いたことが分かるように）
+let _pending = false;
+let _cancelledWhilePending = false;
+let _pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function isModePending() { return _pending; }
+
+export function setModePending(on: boolean) {
+  _pending = on;
+  if (_pendingTimer) { clearTimeout(_pendingTimer); _pendingTimer = null; }
+  if (!on) { $("mode-box").classList.remove("pending"); return; }
+  // 大半の取得は数十 ms で終わる。即座に出すとその都度ちらつくので、
+  // 実際に待たされるときだけ表示する
+  _pendingTimer = setTimeout(() => {
+    _pendingTimer = null;
+    $("mode-box").classList.add("pending");
+  }, PENDING_INDICATOR_DELAY_MS);
+}
+
+/** 取得待ちの間に ESC 等で閉じられていたら true（一度読むとクリアされる）。
+ *  遅れて届いたテキストでウィンドウが勝手に開き直すのを防ぐ */
+export function consumePendingCancel(): boolean {
+  const c = _cancelledWhilePending;
+  _cancelledWhilePending = false;
+  return c;
+}
+
+/** 取得待ちの状態に、届いたテキストを流し込む */
+export function fillPendingText(text: string) {
+  const ta = $("mo-text") as HTMLTextAreaElement;
+  const search = $("mo-search") as HTMLInputElement;
+  // 待っている間にユーザーが打ち始めていたら、その入力を壊さない
+  const untouched = ta.value === "" && search.value === "";
+  setModePending(false);
+  if (untouched) showModeOverlay(text);
+}
+
 export function closeModeOverlay() {
+  if (_pending) {
+    setModePending(false);
+    _cancelledWhilePending = true;
+  }
   $("mode-overlay").classList.remove("open");
 }
 
@@ -100,6 +143,7 @@ function looksLikeWord(text: string): boolean {
 }
 
 export function showModeOverlay(text: string) {
+  if (_pending) setModePending(false);
   const ta = $("mo-text") as HTMLTextAreaElement;
   ta.value = text;
   ta.scrollTop = 0;
