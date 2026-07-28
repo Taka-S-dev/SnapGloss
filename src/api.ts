@@ -4,7 +4,7 @@ import { loadSettings } from "./settings";
 import { buildHtml, extractTagValues, he } from "./renderer";
 import { $, updateContent, showError, showNotice, setLoading, highlightInContent, clearHighlights, wrapWordsInContent } from "./ui";
 import { renderMermaidIn } from "./mermaidRender";
-import { API_TIMEOUT_MS, TEXT_MAX_LENGTH, SPLIT_DEFAULT_PCT, FOLLOWUP_HISTORY_MAX, STREAM_RENDER_INTERVAL_MS } from "./constants";
+import { API_TIMEOUT_MS, API_FIRST_BYTE_TIMEOUT_MS, TEXT_MAX_LENGTH, SPLIT_DEFAULT_PCT, FOLLOWUP_HISTORY_MAX, STREAM_RENDER_INTERVAL_MS } from "./constants";
 import { addHistory } from "./history";
 
 // 進行中より古いリクエストの結果を捨てるための世代カウンター。
@@ -68,8 +68,10 @@ export async function callApi(messages: Message[], onDelta?: (fullText: string) 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (!isLocal) headers["Authorization"] = `Bearer ${apiKey}`;
 
+  // 推論モデルは最初のトークンが出るまで長考することがあるため、
+  // 初回応答（ヘッダ・初回チャンク・非ストリーム JSON）は長めの上限で待つ
   const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`タイムアウト（${API_TIMEOUT_MS / 1000}秒）`)), API_TIMEOUT_MS)
+    setTimeout(() => reject(new Error(`タイムアウト（${API_FIRST_BYTE_TIMEOUT_MS / 1000}秒）`)), API_FIRST_BYTE_TIMEOUT_MS)
   );
   const res = await Promise.race([
     fetch(s.endpoint, {
@@ -93,7 +95,7 @@ export async function callApi(messages: Message[], onDelta?: (fullText: string) 
   const contentType = res.headers.get("content-type") ?? "";
   if (!res.body || !contentType.includes("text/event-stream")) {
     // ストリーム非対応エンドポイント（stream 指定を無視して JSON を返すケース）
-    const data = ChatCompletionSchema.parse(await readWithTimeout(res.json(), API_TIMEOUT_MS));
+    const data = ChatCompletionSchema.parse(await readWithTimeout(res.json(), API_FIRST_BYTE_TIMEOUT_MS));
     if (data.error) throw new Error(data.error.message);
     const content = data.choices?.[0]?.message.content;
     if (!content) throw new Error("レスポンスが空です");
@@ -105,9 +107,13 @@ export async function callApi(messages: Message[], onDelta?: (fullText: string) 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "", full = "";
+  let firstRead = true;
   try {
     for (;;) {
-      const { done, value } = await readWithTimeout(reader.read(), API_TIMEOUT_MS);
+      // 初回チャンクのみ長考を許容し、ストリーム開始後は短い無応答検知に切り替える
+      const { done, value } = await readWithTimeout(
+        reader.read(), firstRead ? API_FIRST_BYTE_TIMEOUT_MS : API_TIMEOUT_MS);
+      firstRead = false;
       if (done) break;
       buf += decoder.decode(value, { stream: true });
       let nl;
