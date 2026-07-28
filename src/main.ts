@@ -12,6 +12,7 @@ import { showModeOverlay, closeModeOverlay, initModeOverlay, runLastMode, runPro
 import { initWordTooltip } from "./tooltip";
 import { initContextMenu, showContextMenu } from "./contextMenu";
 import { processFollowup, processText } from "./api";
+import { toPlainText } from "./renderer";
 import { initHistory, closeHistory, isHistoryOpen } from "./history";
 
 let _copyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -156,7 +157,7 @@ async function init() {
   // ツールバー
   $("copy-btn").addEventListener("click", async () => {
     if (!state.rawText) return;
-    await writeText(state.rawText);
+    await writeText(toPlainText(state.rawText));
     showCopyFeedback();
   });
   let _fontIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
@@ -230,7 +231,7 @@ async function init() {
     } else if (e.key === "c" && e.ctrlKey && !e.shiftKey && !e.altKey) {
       if (state.rawText && !window.getSelection()?.toString()) {
         e.preventDefault();
-        await writeText(state.rawText);
+        await writeText(toPlainText(state.rawText));
         showCopyFeedback();
       }
     }

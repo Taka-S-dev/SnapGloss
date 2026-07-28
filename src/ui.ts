@@ -55,8 +55,9 @@ export function updateContent(html: string, mode: string) {
   $("wrapper").classList.remove("split");
   c.style.flex = "";
   $("content-followup").innerHTML = "";
-  const btn = $("copy-btn");
-  btn.textContent = "コピー"; btn.classList.remove("copied");
+  // ボタン自体の textContent を書き換えるとアイコンとラベル要素が消えるので、ラベルだけ戻す
+  $("copy-label").textContent = "コピー";
+  $("copy-btn").classList.remove("copied");
   const fi = $("followup-input") as HTMLTextAreaElement;
   fi.value = "";
   fi.style.height = "auto";

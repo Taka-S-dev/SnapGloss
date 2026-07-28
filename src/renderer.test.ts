@@ -1,5 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { he, extractTagValues, buildHtml, normalizeSvocTags } from "./renderer";
+import { he, extractTagValues, buildHtml, normalizeSvocTags, toPlainText } from "./renderer";
+
+describe("toPlainText", () => {
+  it("formats bilingual output as orig/trans pairs", () => {
+    const raw = "%%ORIG%%The summit is sacred.\n%%TRANS%%山頂は神聖です。\n%%ORIG%%Second sentence.\n%%TRANS%%二文目。";
+    expect(toPlainText(raw)).toBe(
+      "The summit is sacred.\n山頂は神聖です。\n\nSecond sentence.\n二文目。"
+    );
+  });
+
+  it("handles markers on the same line as text", () => {
+    expect(toPlainText("%%ORIG%%Hello.%%TRANS%%こんにちは。")).toBe("Hello.\nこんにちは。");
+  });
+
+  it("strips inline tags but keeps their content", () => {
+    expect(toPlainText("%%HL:word%% and %%DIFF+:added%%")).toBe("word and added");
+  });
+
+  it("returns plain text unchanged", () => {
+    expect(toPlainText("just text")).toBe("just text");
+  });
+});
 
 describe("he (HTML escape)", () => {
   it("escapes & < >", () => {

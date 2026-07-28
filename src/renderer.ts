@@ -176,7 +176,7 @@ function markdown(text: string): string {
   return result.join("");
 }
 
-function bilingual(text: string): string {
+function parseBilingualPairs(text: string): [string, string][] {
   const normalized = text
     .replace(/%%ORIG%%/g, "\n%%ORIG%%\n")
     .replace(/%%TRANS%%/g, "\n%%TRANS%%\n");
@@ -194,9 +194,25 @@ function bilingual(text: string): string {
     }
   }
   if (orig.length && trans.length) pairs.push([orig.join(" "), trans.join(" ")]);
-  return pairs.map(([o, t]) =>
+  return pairs;
+}
+
+function bilingual(text: string): string {
+  return parseBilingualPairs(text).map(([o, t]) =>
     `<div class="pair"><p class="orig">${inline(o)}</p><p class="trans">${inline(t)}</p></div>`
   ).join("\n");
+}
+
+/** コピー用：%%ORIG%%/%%TRANS%% やインラインタグを落としたプレーンテキストにする */
+export function toPlainText(text: string): string {
+  const strip = (s: string) => s.replace(/%%[A-Z+\-]{1,6}:([^%]*)%%/g, "$1");
+  if (text.includes("%%ORIG%%")) {
+    const pairs = parseBilingualPairs(text);
+    if (pairs.length) {
+      return pairs.map(([o, t]) => `${strip(o)}\n${strip(t)}`).join("\n\n");
+    }
+  }
+  return strip(text).replace(/%%(ORIG|TRANS)%%/g, "").trim();
 }
 
 // ── SVOC タグの決定的補正 ─────────────────────────────────────────────────────
