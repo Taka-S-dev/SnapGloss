@@ -210,7 +210,8 @@ export function initModeOverlay() {
       e.preventDefault();
       _activeIdx = Math.max(_activeIdx - 1, 0);
       updateActiveBtn();
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" && !e.isComposing) {
+      // 変換確定の Enter で実行しない（モード名は日本語なので検索欄で IME を使う）
       e.preventDefault();
       const it = _filteredItems[_activeIdx];
       if (it) selectMode(it.p.name, it.p.text);
