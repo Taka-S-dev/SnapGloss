@@ -161,19 +161,7 @@ export function showModeOverlay(text: string) {
   }
   renderFilteredList("");
   $("mode-overlay").classList.add("open");
-
-  const blankMatch = text.match(/---+/);
-  if (blankMatch && blankMatch.index !== undefined) {
-    ta.focus();
-    ta.setSelectionRange(blankMatch.index, blankMatch.index + blankMatch[0].length);
-    const onPaste = () => {
-      ta.removeEventListener("paste", onPaste);
-      requestAnimationFrame(() => ($("mo-search") as HTMLInputElement).focus());
-    };
-    ta.addEventListener("paste", onPaste);
-  } else {
-    ($("mo-search") as HTMLInputElement).focus();
-  }
+  ($("mo-search") as HTMLInputElement).focus();
 }
 
 export function initModeOverlay() {
