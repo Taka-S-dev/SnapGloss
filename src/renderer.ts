@@ -218,7 +218,9 @@ export function toPlainText(text: string): string {
 // ── SVOC タグの決定的補正 ─────────────────────────────────────────────────────
 // プロンプトで指示してもモデルが繰り返し間違える学校文法のルールを機械的に直す。
 // 1) 前置詞で始まる句は O・C にならない → M へ
-// 2) There 構文（there + be）: there は M、be の後の名詞句列が実質主語 S
+// 2) 文中で最初の VB より前に現れる C は M へ（文頭の分詞句を C にする誤り。
+//    学校文法で C が動詞に先行するのは倒置くらいで、実文ではほぼ現れない）
+// 3) There 構文（there + be）: there は M、be の後の名詞句列が実質主語 S
 
 const PREPOSITION = /^(?:to|of|in|on|at|by|for|from|with|about|into|onto|over|under|through|during|between|among|against|without|within|toward|towards|across|behind|beyond|upon|near|off)\b/i;
 
@@ -228,6 +230,12 @@ export function normalizeSvocTags(text: string): string {
   // 前置詞で始まる O/C は M へ
   text = text.replace(/%%[OC]:([^%]*)%%/g, (full, content: string) =>
     PREPOSITION.test(content.trim()) ? `%%M:${content}%%` : full);
+  // 文（ORIG セグメント）内で最初の VB より前の C は M へ
+  text = text.split(/(%%(?:ORIG|TRANS)%%)/).map(seg => {
+    const firstVb = seg.search(/%%VB:/);
+    if (firstVb < 0) return seg;
+    return seg.slice(0, firstVb).replace(/%%C:([^%]*)%%/g, "%%M:$1%%") + seg.slice(firstVb);
+  }).join("");
   // there + be の直後に続く C/O タグ列（間の「, and」等は許容）を S へ
   const marker = /%%M:[Tt]here%%\s*%%VB:(?:is|are|was|were)\b[^%]*%%/g;
   let out = "", last = 0;
@@ -239,7 +247,8 @@ export function normalizeSvocTags(text: string): string {
     let i = start;
     for (;;) {
       const rest = text.slice(i);
-      const gap = /^(?:[\s,]|and\s|or\s)*/.exec(rest)![0];
+      // 「, and」等に加え、be 動詞と実質主語の間に挟まる副詞の M タグも飛ばす
+      const gap = /^(?:[\s,]|and\s|or\s|%%M:[^%]*%%)*/.exec(rest)![0];
       const tag = /^%%[OC]:([^%]*)%%/.exec(rest.slice(gap.length));
       if (!tag) break;
       out += gap + `%%S:${tag[1]}%%`;

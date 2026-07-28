@@ -194,8 +194,32 @@ describe("normalizeSvocTags", () => {
       .toBe("%%M:there%% %%VB:is%% %%S:no warehouse%%, and %%S:no food court%%");
   });
 
+  it("relabels there-construction complements across intervening M tags", () => {
+    // be 動詞と実質主語の間に副詞の M が挟まるケース
+    expect(normalizeSvocTags("%%M:There%% %%VB:are%% %%M:still%% %%C:two spare keys%%"))
+      .toBe("%%M:There%% %%VB:are%% %%M:still%% %%S:two spare keys%%");
+  });
+
   it("fixes there tagged as S and stops at non-O/C tags", () => {
     expect(normalizeSvocTags("%%S:there%% %%VB:is%% %%C:no store%% %%M:that%% %%S:members%% %%VB:like%% %%O:it%%"))
       .toBe("%%M:there%% %%VB:is%% %%S:no store%% %%M:that%% %%S:members%% %%VB:like%% %%O:it%%");
+  });
+
+  it("converts a C tag preceding the first verb to M", () => {
+    // 文頭の分詞句を C にしてしまうケース
+    expect(normalizeSvocTags("%%C:Angry and confused%%, %%S:the crowd%% %%VB:demanded%% %%O:answers%%"))
+      .toBe("%%M:Angry and confused%%, %%S:the crowd%% %%VB:demanded%% %%O:answers%%");
+  });
+
+  it("scopes the before-verb C fix to each ORIG segment", () => {
+    const input =
+      "%%ORIG%% %%S:It%% %%VB:works%%. %%TRANS%% 動く。 " +
+      "%%ORIG%% %%C:Tired%%, %%S:he%% %%VB:slept%%. %%TRANS%% 眠った。";
+    expect(normalizeSvocTags(input)).toContain("%%M:Tired%%");
+  });
+
+  it("keeps C tags after the verb", () => {
+    expect(normalizeSvocTags("%%S:Time%% %%VB:is%% %%C:money%%"))
+      .toBe("%%S:Time%% %%VB:is%% %%C:money%%");
   });
 });
