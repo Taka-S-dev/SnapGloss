@@ -60,7 +60,9 @@
 
 ホットキー・モデル・テーマ等は設定から変更できます。Ollama 等のローカル LLM を使う場合はエンドポイントを変更すれば API キー不要で動作します。
 
-設定とプロンプトは `%APPDATA%\com.snapgloss.app\settings.json`、API キーは同フォルダの `apikey` に保存されます。ブラウザからは読み取れません。
+設定とプロンプトは `%APPDATA%\SnapGloss\settings.json`、API キーは同フォルダの `apikey` に保存されます。ブラウザからは読み取れません。
+
+v0.2.0 以前から更新した場合、旧保存先（`%APPDATA%\com.snapgloss.app`）の設定と API キーは初回起動時に自動で引き継がれます。
 
 ---
 

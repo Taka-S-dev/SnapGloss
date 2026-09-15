@@ -7,10 +7,22 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-fn key_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    app.path().app_config_dir()
-        .map(|p| p.join("apikey"))
+/// 設定と API キーの保存先フォルダ名。
+///
+/// Tauri の app_config_dir() はバンドル識別子（com.snapgloss.app）をそのまま
+/// フォルダ名にするが、製品名が並ぶ %APPDATA% ではそれだけが浮く。
+/// 識別子自体はインストーラーの製品同一性に使われるので変更しない
+const CONFIG_DIR_NAME: &str = "SnapGloss";
+
+/// 設定・API キーを置くフォルダ（%APPDATA%\SnapGloss）
+fn config_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path().config_dir()
+        .map(|p| p.join(CONFIG_DIR_NAME))
         .map_err(|e| e.to_string())
+}
+
+fn key_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    config_dir(app).map(|p| p.join("apikey"))
 }
 
 #[tauri::command]
@@ -40,9 +52,103 @@ fn set_api_key(app: AppHandle, key: String) -> Result<(), String> {
 }
 
 fn settings_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    app.path().app_config_dir()
-        .map(|p| p.join("settings.json"))
-        .map_err(|e| e.to_string())
+    config_dir(app).map(|p| p.join("settings.json"))
+}
+
+/// 保存先を %APPDATA%\com.snapgloss.app から %APPDATA%\SnapGloss へ移した際の移行。
+/// 起動時に一度だけ呼ぶ。0.2.0 以前からの更新でも設定と API キーを引き継ぐためのもの
+fn migrate_legacy_config_dir(app: &AppHandle) {
+    let Ok(new_dir) = config_dir(app) else { return };
+    let Ok(old_dir) = app.path().app_config_dir() else { return };
+    migrate_config_files(&old_dir, &new_dir);
+}
+
+/// 旧フォルダから新フォルダへ設定ファイルを移す。
+/// 新側に同名ファイルがあれば触らない（新しいほうが正）。移動できたものだけ消えるので、
+/// 途中で失敗しても旧ファイルは残り、設定が失われることはない
+fn migrate_config_files(old_dir: &std::path::Path, new_dir: &std::path::Path) {
+    if old_dir == new_dir || !old_dir.is_dir() { return; }
+    for name in ["apikey", "settings.json"] {
+        let src = old_dir.join(name);
+        let dst = new_dir.join(name);
+        if !src.is_file() || dst.exists() { continue; }
+        if std::fs::create_dir_all(new_dir).is_err() { return; }
+        // 同一ボリュームなら rename。失敗したらコピーで代替し、旧ファイルは残す
+        if std::fs::rename(&src, &dst).is_err() {
+            let _ = std::fs::copy(&src, &dst);
+        }
+    }
+    // 空になったときだけ旧フォルダを片付ける（中身が残っていれば失敗するので安全）
+    let _ = std::fs::remove_dir(old_dir);
+}
+
+#[cfg(test)]
+mod migrate_config_tests {
+    use super::migrate_config_files;
+    use std::fs;
+
+    fn temp_root(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("snapgloss-test-{}-{tag}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn moves_files_and_removes_the_empty_old_dir() {
+        let root = temp_root("move");
+        let (old, new) = (root.join("com.snapgloss.app"), root.join("SnapGloss"));
+        fs::create_dir_all(&old).unwrap();
+        fs::write(old.join("apikey"), "sk-test").unwrap();
+        fs::write(old.join("settings.json"), "{}").unwrap();
+
+        migrate_config_files(&old, &new);
+
+        assert_eq!(fs::read_to_string(new.join("apikey")).unwrap(), "sk-test");
+        assert_eq!(fs::read_to_string(new.join("settings.json")).unwrap(), "{}");
+        assert!(!old.exists(), "空になった旧フォルダは消える");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn never_overwrites_the_new_location() {
+        let root = temp_root("keep");
+        let (old, new) = (root.join("com.snapgloss.app"), root.join("SnapGloss"));
+        fs::create_dir_all(&old).unwrap();
+        fs::create_dir_all(&new).unwrap();
+        fs::write(old.join("apikey"), "old").unwrap();
+        fs::write(new.join("apikey"), "new").unwrap();
+
+        migrate_config_files(&old, &new);
+
+        assert_eq!(fs::read_to_string(new.join("apikey")).unwrap(), "new");
+        assert_eq!(fs::read_to_string(old.join("apikey")).unwrap(), "old", "旧ファイルも残す");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn leaves_unrelated_files_and_the_old_dir_alone() {
+        let root = temp_root("other");
+        let (old, new) = (root.join("com.snapgloss.app"), root.join("SnapGloss"));
+        fs::create_dir_all(&old).unwrap();
+        fs::write(old.join("settings.json"), "{}").unwrap();
+        fs::write(old.join("EBWebView-lock"), "x").unwrap();
+
+        migrate_config_files(&old, &new);
+
+        assert!(old.join("EBWebView-lock").is_file(), "見知らぬファイルは触らない");
+        assert!(old.is_dir(), "空でない旧フォルダは残す");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn does_nothing_when_there_is_no_old_dir() {
+        let root = temp_root("absent");
+        let (old, new) = (root.join("com.snapgloss.app"), root.join("SnapGloss"));
+        migrate_config_files(&old, &new);
+        assert!(!new.exists(), "移すものがなければ新フォルダも作らない");
+        fs::remove_dir_all(&root).unwrap();
+    }
 }
 
 // エクスポート／インポート用（パスはネイティブダイアログでユーザーが選んだもの）
@@ -601,6 +707,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![hide_window, show_window, register_shortcut, get_api_key, set_api_key, get_settings, set_settings, write_text_file, read_text_file])
         .setup(|app| {
+            // 設定を読むより先に、旧フォルダからの引き継ぎを済ませる
+            migrate_legacy_config_dir(app.handle());
+
             let shortcut = Shortcut::new(
                 Some(Modifiers::CONTROL | Modifiers::SHIFT),
                 Code::KeyZ,

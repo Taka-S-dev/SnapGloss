@@ -5,7 +5,7 @@ import { DEFAULT_PROMPTS, type Prompt, type Settings } from "./state";
 import { he } from "./renderer";
 import { $ } from "./ui";
 
-// 設定は %APPDATA%\<identifier>\settings.json に保存する（apikey と同じ場所）。
+// 設定は %APPDATA%\SnapGloss\settings.json に保存する（apikey と同じ場所）。
 // 起動時に initSettings() で一度読み込み、以降は同期の loadSettings() がキャッシュを返す。
 let _settings: Settings | null = null;
 
