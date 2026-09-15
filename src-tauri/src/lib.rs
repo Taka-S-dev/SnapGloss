@@ -177,7 +177,97 @@ fn set_settings(app: AppHandle, json: String) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&path, json).map_err(|e| e.to_string())
+    std::fs::write(&path, &json).map_err(|e| e.to_string())?;
+    // ホットキー経路がディスクを読まずに済むよう、メモリ側も同時に更新する
+    if let Some(list) = excluded_apps_from_settings(&json) {
+        if let Some(state) = app.try_state::<ExcludedApps>() {
+            if let Ok(mut current) = state.0.lock() { *current = list; }
+        }
+    }
+    Ok(())
+}
+
+/// 既定の「選択範囲を自動取得しない」アプリ。
+///
+/// 載せる基準は「Ctrl+C がコピーではなく実行中プロセスへの割り込みになる」こと、
+/// つまりターミナルであることだけ。内蔵ターミナルを持つエディタ・IDE（VS Code や
+/// JetBrains 系）は載せない。内蔵パネルのために本体での選択取得を潰すほうが実害が
+/// 大きく、しかもそれを名前で網羅するのは原理的に不可能なため。
+/// 足りない・余計なぶんはユーザーが設定で編集する。
+const DEFAULT_EXCLUDED_APPS: &[&str] = &[
+    "windowsterminal.exe", "wt.exe",  // Windows Terminal
+    "openconsole.exe", "conhost.exe", // コンソールホスト
+    "powershell.exe", "pwsh.exe",     // PowerShell
+    "cmd.exe",                        // コマンドプロンプト
+    "mintty.exe",                     // Git Bash / MSYS2
+    "alacritty.exe",
+    "wezterm-gui.exe",
+    "hyper.exe",
+    "tabby.exe",
+    "warp.exe",
+    "conemu64.exe", "conemu.exe",
+    "putty.exe", "kitty.exe",         // SSH クライアント（Ctrl+C はリモートに届く）
+];
+
+#[cfg(test)]
+mod excluded_apps_tests {
+    use super::{excluded_apps_from_settings, DEFAULT_EXCLUDED_APPS};
+
+    #[test]
+    fn reads_and_normalizes_the_list() {
+        let raw = r#"{"excludedApps": ["  WT.exe ", "cmd.exe", "", "  "]}"#;
+        assert_eq!(
+            excluded_apps_from_settings(raw),
+            Some(vec!["wt.exe".to_string(), "cmd.exe".to_string()])
+        );
+    }
+
+    #[test]
+    fn empty_list_means_exclude_nothing() {
+        // 「既定に戻す」ではなく「全アプリで自動取得する」という有効な設定
+        assert_eq!(excluded_apps_from_settings(r#"{"excludedApps": []}"#), Some(vec![]));
+    }
+
+    #[test]
+    fn missing_or_broken_falls_back_to_defaults() {
+        assert_eq!(excluded_apps_from_settings(r#"{"model": "x"}"#), None);
+        assert_eq!(excluded_apps_from_settings(r#"{"excludedApps": "wt.exe"}"#), None);
+        assert_eq!(excluded_apps_from_settings("not json"), None);
+    }
+
+    #[test]
+    fn editors_are_not_excluded_by_default() {
+        // 内蔵ターミナルを持つだけのアプリを既定で潰さない
+        for app in ["code.exe", "cursor.exe", "idea64.exe", "fork.exe"] {
+            assert!(!DEFAULT_EXCLUDED_APPS.contains(&app), "{app} should not be excluded");
+        }
+    }
+}
+
+/// 前面アプリの判定に使う除外リスト。settings.json を単一の正とし、起動時に読み込んで
+/// ここに載せる。以降は set_settings が更新する
+struct ExcludedApps(std::sync::Mutex<Vec<String>>);
+
+#[tauri::command]
+fn default_excluded_apps() -> Vec<String> {
+    DEFAULT_EXCLUDED_APPS.iter().map(|s| s.to_string()).collect()
+}
+
+/// 比較しやすいよう小文字化・トリムし、空要素を落とす
+fn normalize_app_names(names: &[serde_json::Value]) -> Vec<String> {
+    names.iter()
+        .filter_map(|v| v.as_str())
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// settings.json 本文から除外リストを取り出す。項目がなければ None（＝既定を使う）。
+/// 空配列は「何も除外しない」という有効な設定なので Some(vec![]) を返す
+fn excluded_apps_from_settings(raw: &str) -> Option<Vec<String>> {
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let names = value.get("excludedApps")?.as_array()?;
+    Some(normalize_app_names(names))
 }
 
 #[tauri::command]
@@ -674,25 +764,21 @@ fn foreground_is_self() -> bool {
 #[cfg(not(target_os = "windows"))]
 fn foreground_is_self() -> bool { false }
 
+/// 前面アプリに Ctrl+C を送ってよいか。プロセス名が取れないときは送らない（安全側）
 #[cfg(target_os = "windows")]
-fn foreground_is_safe() -> bool {
+fn foreground_is_safe(app: &AppHandle) -> bool {
     let name = foreground_process_name();
     if name.is_empty() { return false; }
-    {
-        !matches!(name.as_str(),
-            "windowsterminal.exe" | "wt.exe" | // Windows Terminal
-            "powershell.exe" | "pwsh.exe"     | // PowerShell
-            "cmd.exe"                          | // コマンドプロンプト
-            "code.exe"                         | // VS Code（統合ターミナル含む）
-            "conhost.exe"                      | // コンソールホスト
-            "mintty.exe"                       | // Git Bash
-            "alacritty.exe"                      // Alacritty
-        )
-    }
+    let Some(state) = app.try_state::<ExcludedApps>() else { return false };
+    let safe = match state.0.lock() {
+        Ok(excluded) => !excluded.iter().any(|e| e == &name),
+        Err(_) => false,
+    };
+    safe
 }
 
 #[cfg(not(target_os = "windows"))]
-fn foreground_is_safe() -> bool { true }
+fn foreground_is_safe(_app: &AppHandle) -> bool { true }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -719,7 +805,7 @@ pub fn run() {
                     if event.state() == ShortcutState::Pressed {
                         let mode = if foreground_is_self() {
                             Capture::Skip
-                        } else if foreground_is_safe() {
+                        } else if foreground_is_safe(app) {
                             Capture::SendCopy
                         } else {
                             Capture::ClipboardOnly
@@ -730,10 +816,16 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![hide_window, show_window, register_shortcut, get_api_key, set_api_key, get_settings, set_settings, write_text_file, read_text_file])
+        .invoke_handler(tauri::generate_handler![hide_window, show_window, register_shortcut, get_api_key, set_api_key, get_settings, set_settings, default_excluded_apps, write_text_file, read_text_file])
         .setup(|app| {
             // 設定を読むより先に、旧フォルダからの引き継ぎを済ませる
             migrate_legacy_config_dir(app.handle());
+
+            // 除外リストはホットキー登録より先に用意する（登録後は即座に発火しうる）
+            let excluded = get_settings(app.handle().clone()).ok()
+                .and_then(|raw| excluded_apps_from_settings(&raw))
+                .unwrap_or_else(default_excluded_apps);
+            app.manage(ExcludedApps(std::sync::Mutex::new(excluded)));
 
             let shortcut = Shortcut::new(
                 Some(Modifiers::CONTROL | Modifiers::SHIFT),

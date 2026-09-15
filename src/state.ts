@@ -30,6 +30,11 @@ export interface Settings {
   theme: "auto" | "light" | "dark";
   /** ホットキーで即実行するモード。"" = オフ、"__last__" = 前回のモード、それ以外はプロンプト名 */
   autoRun: string;
+  /**
+   * 前面のときに Ctrl+C を送らないアプリの実行ファイル名（小文字）。
+   * 既定値は Rust 側の DEFAULT_EXCLUDED_APPS が正で、default_excluded_apps コマンドで取得する。
+   */
+  excludedApps: string[];
   prompts: Prompt[];
 }
 

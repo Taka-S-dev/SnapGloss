@@ -9,6 +9,23 @@ import { $ } from "./ui";
 // 起動時に initSettings() で一度読み込み、以降は同期の loadSettings() がキャッシュを返す。
 let _settings: Settings | null = null;
 
+// 除外アプリの既定値は Rust 側が正。initSettings で一度取得して以降はこれを使う
+let _defaultExcludedApps: string[] = [];
+
+/** 実行ファイル名を比較可能な形に揃える（小文字・トリム・空行と重複を除去） */
+export function normalizeAppNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  for (const n of names) {
+    const v = n.trim().toLowerCase();
+    if (v) seen.add(v);
+  }
+  return [...seen];
+}
+
+export function defaultExcludedApps(): string[] {
+  return [..._defaultExcludedApps];
+}
+
 // 新しいデフォルトプロンプトを名前ベースで補充する
 function mergeDefaultPrompts(saved: Prompt[]): Prompt[] {
   const names = new Set(saved.map(p => p.name));
@@ -25,6 +42,10 @@ function normalizeSettings(p: Partial<Settings> | null): Settings {
     autoHide:    p?.autoHide    ?? false,
     theme:       p?.theme       ?? "auto",
     autoRun:     p?.autoRun     ?? "",
+    // 未設定なら既定を採用。空配列は「何も除外しない」という有効な設定なので尊重する
+    excludedApps: Array.isArray(p?.excludedApps)
+      ? normalizeAppNames(p!.excludedApps)
+      : defaultExcludedApps(),
     prompts:     mergeDefaultPrompts(Array.isArray(p?.prompts) ? p!.prompts : []),
   };
 }
@@ -46,6 +67,10 @@ function settingsFromLocalStorage(): Settings {
 
 /** 起動時に一度だけ呼ぶ。settings.json がなければ localStorage から移行する */
 export async function initSettings(): Promise<void> {
+  // normalizeSettings が既定値として使うので、設定を読む前に取得しておく
+  try {
+    _defaultExcludedApps = await invoke<string[]>("default_excluded_apps");
+  } catch { /* 取得できなければ「除外なし」で続行する */ }
   try {
     const raw = await invoke<string>("get_settings");
     if (raw.trim()) {
@@ -189,6 +214,7 @@ const ExportSchema = z.object({
   theme: z.enum(["auto", "light", "dark"]).optional(),
   autoRun: z.string().optional(),
   autoHide: z.boolean().optional(),
+  excludedApps: z.array(z.string()).optional(),
   prompts: z.array(z.object({ name: z.string().min(1), text: z.string().min(1) })).min(1),
 });
 
@@ -215,6 +241,7 @@ async function exportSettings() {
     theme:       ($("s-theme")    as HTMLSelectElement).value as Settings["theme"],
     autoRun:     ($("s-autorun")  as HTMLSelectElement).value,
     autoHide:    ($("s-autohide") as HTMLInputElement).checked,
+    excludedApps: getExcludedApps(),
     prompts:     getPrompts(),
   };
   try {
@@ -253,6 +280,7 @@ async function importSettings() {
   if (parsed.hotkey      !== undefined) ($("s-hotkey")   as HTMLInputElement).value = parsed.hotkey;
   if (parsed.theme       !== undefined) ($("s-theme")    as HTMLSelectElement).value = parsed.theme;
   if (parsed.autoHide    !== undefined) ($("s-autohide") as HTMLInputElement).checked = parsed.autoHide;
+  if (parsed.excludedApps !== undefined) setExcludedApps(normalizeAppNames(parsed.excludedApps));
   renderPrompts(parsed.prompts);
   renderAutoRunOptions({ ...loadSettings(), prompts: parsed.prompts, autoRun: parsed.autoRun ?? "" });
   settingsMsg(`${parsed.prompts.length} 件のプロンプトを読み込みました。「保存」で確定します`, true);
@@ -273,6 +301,15 @@ function renderAutoRunOptions(s: Settings) {
   for (const p of s.prompts) add(p.name, `「${p.name}」で実行`);
   // 保存値のプロンプトが削除・改名されていたらオフに戻す
   sel.value = [...sel.options].some(o => o.value === s.autoRun) ? s.autoRun : "";
+}
+
+// 除外アプリは1行1件のテキストエリアで編集する
+function setExcludedApps(apps: string[]) {
+  ($("s-excluded") as HTMLTextAreaElement).value = apps.join("\n");
+}
+
+function getExcludedApps(): string[] {
+  return normalizeAppNames(($("s-excluded") as HTMLTextAreaElement).value.split("\n"));
 }
 
 function switchTab(tab: string) {
@@ -302,6 +339,7 @@ async function doSaveSettings() {
     autoHide:    ($("s-autohide") as HTMLInputElement).checked,
     theme:       ($("s-theme") as HTMLSelectElement).value as Settings["theme"],
     autoRun:     ($("s-autorun") as HTMLSelectElement).value,
+    excludedApps: getExcludedApps(),
     prompts:     getPrompts(),
   };
 
@@ -332,6 +370,7 @@ export async function openSettings() {
   ($("s-hotkey")   as HTMLInputElement).value  = s.hotkey;
   ($("s-autohide") as HTMLInputElement).checked = s.autoHide;
   ($("s-theme") as HTMLSelectElement).value = s.theme;
+  setExcludedApps(s.excludedApps);
   renderAutoRunOptions(s);
   renderPrompts(s.prompts);
   $("settings-msg").textContent = "";
@@ -391,6 +430,7 @@ export function initSettingsModal() {
   });
   $("settings-cancel").addEventListener("click", closeSettings);
   $("settings-save").addEventListener("click", doSaveSettings);
+  $("s-excluded-reset").addEventListener("click", () => setExcludedApps(defaultExcludedApps()));
   $("prompts-add").addEventListener("click", () => $("prompts-list").appendChild(makePromptRow("", "")));
   $("prompts-export").addEventListener("click", exportSettings);
   $("prompts-import").addEventListener("click", importSettings);

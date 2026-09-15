@@ -370,6 +370,20 @@ select option { background: var(--bg-panel); color: var(--text); }
 .model-opt .m-desc { font-size: 11px; color: var(--text-3); }
 #s-hotkey { cursor: pointer; }
 #s-hotkey.recording { border-color: var(--accent) !important; background: var(--accent-soft); color: var(--accent); }
+.s-textarea {
+  width: 100%; padding: 6px 10px; border: 1px solid var(--border-strong);
+  border-radius: 4px; font-size: 12px; font-family: ui-monospace, Consolas, monospace;
+  resize: vertical; outline: none; transition: border-color .15s;
+  background: var(--bg-panel); color: var(--text);
+}
+.s-textarea:focus { border-color: var(--accent); }
+.s-row-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+.s-row-actions button {
+  padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: 4px;
+  background: var(--bg-panel); color: var(--text-2); cursor: pointer;
+  font-size: 11px; font-family: inherit; transition: background .15s;
+}
+.s-row-actions button:hover { background: var(--bg-hover); }
 .s-row-split { display: flex; gap: 12px; }
 .s-row-split .s-row { flex: 1; }
 #settings-msg { font-size: 12px; min-height: 18px; margin: 0 22px 8px; }

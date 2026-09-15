@@ -87,6 +87,16 @@
             <label>ホットキーで即実行 <span style="font-size:11px;color:var(--text-3)">（モード選択を飛ばして指定モードで実行。モード名クリックで選択画面に戻れます）</span></label>
             <select id="s-autorun"></select>
           </div>
+          <div class="s-row" title="ここに書いたアプリが前面のときは Ctrl+C を送らず、そのときのクリップボードの内容をそのまま使います。Ctrl+C がコピーではなく実行中コマンドの中断になるターミナルを想定しています">
+            <label>
+              選択範囲を自動取得しないアプリ
+              <span style="font-size:11px;color:var(--text-3)">（1行に1つ、実行ファイル名。ターミナルなど Ctrl+C が中断になるもの）</span>
+            </label>
+            <textarea id="s-excluded" class="s-textarea" rows="4" spellcheck="false" placeholder="wt.exe"></textarea>
+            <div class="s-row-actions">
+              <button type="button" id="s-excluded-reset">既定に戻す</button>
+            </div>
+          </div>
           <div class="s-row">
             <label>テーマ</label>
             <select id="s-theme">
