@@ -1,5 +1,5 @@
 use enigo::{
-    Direction::{Click, Press, Release},
+    Direction::{Press, Release},
     Enigo, Key, Keyboard, Settings,
 };
 use std::{thread, time::{Duration, Instant}};
@@ -520,6 +520,22 @@ fn show_main_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     Some(win)
 }
 
+/// 前景アプリに Ctrl+C を送る。
+///
+/// 押下・離上の間に間隔を入れないと、入力キューの処理が追いつかないアプリが
+/// 修飾なしの `c` として受け取ったり丸ごと取りこぼしたりする（Fork のコミット
+/// メッセージ欄で発生）。60ms の追加は体感できない範囲。
+fn send_ctrl_c(enigo: &mut Enigo) {
+    let gap = Duration::from_millis(20);
+    let _ = enigo.key(Key::Control, Press);
+    thread::sleep(gap);
+    let _ = enigo.key(Key::Unicode('c'), Press);
+    thread::sleep(gap);
+    let _ = enigo.key(Key::Unicode('c'), Release);
+    thread::sleep(gap);
+    let _ = enigo.key(Key::Control, Release);
+}
+
 /// ホットキー時に何をするか
 #[derive(Clone, Copy, PartialEq)]
 enum Capture {
@@ -561,9 +577,9 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
             let released = wait_for_modifiers_released(Duration::from_millis(400));
             let before_seq = clipboard_sequence();
             debug_log(&format!("modifiers_released={released} before_seq={before_seq}"));
-            let mut enigo_ok = false;
-            if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
-                enigo_ok = true;
+            let mut enigo = Enigo::new(&Settings::default()).ok();
+            let enigo_ok = enigo.is_some();
+            if let Some(enigo) = enigo.as_mut() {
                 // 離れるのを待ちきれなかったときだけ、合成 Release で状態をこじ開ける
                 if !released {
                     let _ = enigo.key(Key::Control, Release);
@@ -571,13 +587,22 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
                     let _ = enigo.key(Key::Alt, Release);
                     thread::sleep(Duration::from_millis(30));
                 }
-                let _ = enigo.key(Key::Control, Press);
-                let _ = enigo.key(Key::Unicode('c'), Click);
-                let _ = enigo.key(Key::Control, Release);
+                send_ctrl_c(enigo);
             }
-            let copied = wait_for_copied_text(&app, before_seq, Duration::from_millis(1500), || {
+            let mut copied = wait_for_copied_text(&app, before_seq, Duration::from_millis(600), || {
                 show_pending(&app, &mut shown);
             });
+            // 1 回目が届かないことがある（前景アプリが入力キューを処理しきる前に
+            // キーが通り過ぎる）。クリップボードが動いていなければもう一度だけ送る
+            if copied.is_none() {
+                if let Some(enigo) = enigo.as_mut() {
+                    debug_log("no clipboard change in 600ms, retrying ctrl+c");
+                    send_ctrl_c(enigo);
+                    copied = wait_for_copied_text(&app, before_seq, Duration::from_millis(1200), || {
+                        show_pending(&app, &mut shown);
+                    });
+                }
+            }
             let changed = copied.is_some();
             let copied = copied.unwrap_or_default();
             // 元のクリップボードを復元する前に HTML フレーバーを読む
