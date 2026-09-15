@@ -127,7 +127,7 @@ $env:SNAPGLOSS_DEBUG = "1"; .\snap-gloss.exe
 ## ファイル構成
 
 ```
-SnapAI-tauri/
+SnapGloss/
 ├── index.html            # UI 全体（オーバーレイ含む）
 ├── src/
 │   ├── main.ts           # エントリーポイント
