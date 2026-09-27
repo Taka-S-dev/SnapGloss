@@ -89,6 +89,10 @@ npm run tauri build
 
 インストーラーは `src-tauri/target/release/bundle/` に生成されます（`v*` タグの push で GitHub Actions が自動ビルドし、ドラフトリリースに添付します）。
 
+### アイコン
+
+元絵は `src-tauri/icons/icon.svg`（完全版）、`icon-small.svg`（32・48px 用）、`icon-tiny.svg`（16・24px 用）の 3 つ。小さいサイズは要素を減らした絵を当て、`icon.ico` にはサイズごとに別の絵が入ります。SVG を直したら `python scripts/make-icons.py`（要 Pillow）で全サイズを作り直します。
+
 ### ホットキー取得の診断ログ
 
 環境変数 `SNAPGLOSS_DEBUG` を設定して起動すると、ホットキー 1 回ごとの取得結果を

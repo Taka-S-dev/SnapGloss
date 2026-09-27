@@ -31,5 +31,9 @@ test-rust:
 bundle:
     npm run tauri build
 
+# アイコンを src-tauri/icons/*.svg から作り直す（要 Pillow）
+icons:
+    python scripts/make-icons.py
+
 # push 前の一通り（CI が落ちる変更を手元で見つける）
 check: build test test-rust
