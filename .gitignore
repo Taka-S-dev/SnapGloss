@@ -8,6 +8,7 @@
 !package-lock.json
 !tsconfig.json
 !vite.config.ts
+!justfile
 !README.md
 !.github/
 !.github/**
