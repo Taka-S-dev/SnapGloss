@@ -71,7 +71,7 @@ v0.2.0 以前から更新した場合、旧保存先（`%APPDATA%\com.snapgloss.
 ### 必要環境
 
 - [Rust](https://rustup.rs/) (stable)
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 20+
 - OpenAI API キー（または互換 API）
 
 ### 起動
@@ -114,7 +114,7 @@ $env:SNAPGLOSS_DEBUG = "1"; .\snap-gloss.exe
 | ------------------------- | ---------------------------------------------------- |
 | テキスト選択 → ホットキー | モード選択を開く（デフォルト: `Ctrl+Shift+Z`）       |
 | ホットキー 2度押し        | 前回と同じモードで即実行                             |
-| `1`〜`9` / `↑↓`+`Enter`   | モードを選択                                         |
+| `1`〜`9` / `↑↓←→`+`Enter` | モードを選択                                         |
 | `Ctrl+Enter`              | テキスト欄から選択中モードを実行                     |
 | `Enter` / `Shift+Enter`   | 追加質問を送信 / 改行                                |
 | `ESC`                     | 内容をリセットしてウィンドウを隠す                   |
