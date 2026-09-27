@@ -633,6 +633,22 @@ fn show_main_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     Some(win)
 }
 
+/// ウィンドウをカーソル位置に出すが、フォーカスは奪わない（前景アプリはそのまま）。
+/// ホットキー直後に呼び、取得を待つ間も「反応した」ことが見えるようにする。
+/// 通常の show() は前面化を伴い、送った Ctrl+C が前景アプリに届かなくなる。
+/// 一時的に focusable を外してから show() し、直後に戻す（戻さないと以後フォーカスできない）。
+/// ShowWindow を直接呼ぶ方法は取らない。Tauri 側の表示状態が更新されず、
+/// その後の hide() が「既に非表示」とみなされて効かなくなる
+fn show_main_window_no_activate(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+    let win = app.get_webview_window("main")?;
+    move_window_to_cursor(app, &win);
+    let _ = win.unminimize();
+    let _ = win.set_focusable(false);
+    let _ = win.show();
+    let _ = win.set_focusable(true);
+    Some(win)
+}
+
 /// 前景アプリに Ctrl+C を送る。
 ///
 /// 押下・離上の間に間隔を入れないと、入力キューの処理が追いつかないアプリが
@@ -709,14 +725,14 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
             foreground_process_name(), prev_clipboard.chars().count(), foreground_focus_info()
         ));
 
-        // コピー開始を検知した時点でウィンドウを出す。取得完了まで 1 秒以上かかることがあり、
-        // それまで何も出ないと固まったように見える。Ctrl+C を送る前に出すと
-        // フォーカスを奪って前景アプリにキーが届かなくなるため、この順序でなければならない
+        // Ctrl+C を送った直後にウィンドウを出す（フォーカスは奪わない）。選択がなくても
+        // 押した瞬間に反応が見え、取得を待つ 2 秒近くが無反応にならない。
+        // フォーカスは取得結果が確定してから移す（下の emit の直前）
         let mut shown = false;
         let show_pending = |app: &AppHandle, shown: &mut bool| {
             if *shown { return; }
             *shown = true;
-            if let Some(win) = show_main_window(app) {
+            if let Some(win) = show_main_window_no_activate(app) {
                 let _ = win.emit("hotkey-pending", ());
             }
         };
@@ -744,11 +760,14 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
                 }
                 send_ctrl_c(enigo);
             }
-            let mut copied = wait_for_copied_text(&app, before_seq, Duration::from_millis(600), || {
-                show_pending(&app, &mut shown);
-            });
-            // 1 回目が届かないことがある（前景アプリが入力キューを処理しきる前に
-            // キーが通り過ぎる）。クリップボードが動いていなければもう一度だけ送る
+            show_pending(&app, &mut shown);
+            let mut copied = wait_for_copied_text(&app, before_seq, Duration::from_millis(600), || {});
+            // 600ms 経っても取れないときの原因は 2 通りあり、対処が逆になる。
+            //
+            // クリップボードが一度も動いていない → キー自体が届いていない。もう一度送る
+            //   （ウィンドウは非アクティブ表示なので、前景アプリにそのまま届く）。
+            // 番号が動いている → コピーは始まっていて読めるだけ遅い。送り直さず待つだけ
+            //   （Fork のように書き込みフォーマットが多いアプリで起きる）。
             if copied.is_none() {
                 if !clipboard_changed_since(before_seq) {
                     if let Some(enigo) = enigo.as_mut() {
@@ -758,6 +777,7 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
                 } else {
                     debug_log("copy started but text not readable in 600ms, waiting without resending");
                 }
+                copied = wait_for_copied_text(&app, before_seq, Duration::from_millis(1200), || {});
             }
             let changed = copied.is_some();
             let copied = copied.unwrap_or_default();
@@ -776,9 +796,11 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
             clipboard_html_as_markdown().unwrap_or(prev_clipboard)
         };
 
-        // コピー開始を検知できていれば表示済み。それ以外（取得失敗・Skip・ClipboardOnly）はここで出す
+        // SendCopy 経路は非アクティブで表示済みなので、ここでフォーカスを移す。
+        // それ以外（Skip・ClipboardOnly）はここで出す
         let win = if shown { app.get_webview_window("main") } else { show_main_window(&app) };
         if let Some(win) = win {
+            if shown { let _ = win.set_focus(); }
             let _ = win.emit("hotkey-fired", text);
         }
     });
