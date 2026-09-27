@@ -336,24 +336,56 @@ fn parse_shortcut(s: &str) -> Option<Shortcut> {
 
 /// ウィンドウをマウスカーソルの近くに移動する。
 /// カーソルのあるモニターの作業領域（タスクバー除く）内に収まるようクランプする。
+///
+/// モニターごとに拡大率が違う環境では、別のモニターへ移した瞬間に Windows がウィンドウを
+/// 再スケールして物理サイズが変わる（100% → 200% なら幅が倍になる）。移動前のサイズで
+/// クランプすると、その差のぶん右・下にはみ出して隣のモニターへ貫通する。
+/// 移動先の拡大率でサイズを見積もってクランプし、さらに移動後に実サイズで一度クランプし直す
 fn move_window_to_cursor(app: &AppHandle, win: &tauri::WebviewWindow) {
     let Ok(cursor) = app.cursor_position() else { return };
+    let monitor = app.monitor_from_point(cursor.x, cursor.y).ok().flatten();
+
+    // 移動先の拡大率で見積もったサイズ
+    let scale_ratio = match (&monitor, win.scale_factor()) {
+        (Some(m), Ok(cur)) if cur > 0.0 => m.scale_factor() / cur,
+        _ => 1.0,
+    };
+    let clamp = |size: tauri::PhysicalSize<u32>, ratio: f64| -> (f64, f64) {
+        let w = size.width as f64 * ratio;
+        let h = size.height as f64 * ratio;
+        let mut x = cursor.x + 12.0;
+        let mut y = cursor.y + 12.0;
+        if let Some(m) = &monitor {
+            let area = m.work_area();
+            let min_x = area.position.x as f64;
+            let min_y = area.position.y as f64;
+            x = x.clamp(min_x, (min_x + area.size.width as f64 - w).max(min_x));
+            y = y.clamp(min_y, (min_y + area.size.height as f64 - h).max(min_y));
+        }
+        (x, y)
+    };
+
     let Ok(size) = win.outer_size() else { return };
-
-    let mut x = cursor.x + 12.0;
-    let mut y = cursor.y + 12.0;
-
-    if let Ok(Some(monitor)) = app.monitor_from_point(cursor.x, cursor.y) {
-        let area = monitor.work_area();
-        let min_x = area.position.x as f64;
-        let min_y = area.position.y as f64;
-        let max_x = min_x + area.size.width as f64 - size.width as f64;
-        let max_y = min_y + area.size.height as f64 - size.height as f64;
-        x = x.clamp(min_x, max_x.max(min_x));
-        y = y.clamp(min_y, max_y.max(min_y));
-    }
-
+    let (x, y) = clamp(size, scale_ratio);
+    debug_log(&format!(
+        "place window: cursor=({:.0},{:.0}) size={}x{} scale_ratio={:.2} monitor={} -> ({:.0},{:.0})",
+        cursor.x, cursor.y, size.width, size.height, scale_ratio,
+        monitor.as_ref().map(|m| {
+            let a = m.work_area();
+            format!("work[{},{} {}x{}]@{:.2}", a.position.x, a.position.y, a.size.width, a.size.height, m.scale_factor())
+        }).unwrap_or_else(|| "none".into()),
+        x, y
+    ));
     let _ = win.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+
+    // 移動で再スケールされていたら、実サイズで置き直す
+    if let Ok(after) = win.outer_size() {
+        if after != size {
+            let (x2, y2) = clamp(after, 1.0);
+            debug_log(&format!("place window: rescaled to {}x{} -> ({:.0},{:.0})", after.width, after.height, x2, y2));
+            let _ = win.set_position(tauri::PhysicalPosition::new(x2 as i32, y2 as i32));
+        }
+    }
 }
 
 // ── クリップボードの HTML フレーバー読み取り ────────────────────────────────
