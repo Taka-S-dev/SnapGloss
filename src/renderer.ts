@@ -5,8 +5,9 @@ export function he(s: string): string {
 // ── インラインタグ定義 ─────────────────────────────────────────────────────────
 // 新しいタグはここに1行追加するだけ
 
+// 下線は <rb>（本文）に引く。<ruby> 自体に引くと、下に置いたラベル（rt）が線の上に重なる
 const svoc = (label: string, cls: string) => (c: string) =>
-  `<ruby class="svoc ${cls}">${he(c)}<rt>${label}</rt></ruby>`;
+  `<ruby class="svoc ${cls}"><rb>${he(c)}</rb><rt>${label}</rt></ruby>`;
 
 const INLINE_TAGS: Record<string, (content: string) => string> = {
   "HL":      (c) => `<mark class="hl">${he(c)}</mark>`,

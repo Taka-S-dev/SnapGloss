@@ -133,8 +133,8 @@ describe("buildHtml", () => {
   it("salvages a nest-broken tag missing its opening marker", () => {
     // %%M:that %%S:members%% → 外側タグが内側の開始 %% を閉じとして消費したケース
     expect(buildHtml("%%M:that %%S:members%% rest")).toBe(
-      '<p><ruby class="svoc svoc-m">that <rt>M</rt></ruby>' +
-      '<ruby class="svoc svoc-s">members<rt>S</rt></ruby> rest</p>',
+      '<p><ruby class="svoc svoc-m"><rb>that </rb><rt>M</rt></ruby>' +
+      '<ruby class="svoc svoc-s"><rb>members</rb><rt>S</rt></ruby> rest</p>',
     );
   });
 

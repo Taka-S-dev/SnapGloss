@@ -644,17 +644,18 @@ span.w.word-occ  { background: var(--word-occ); border-radius: 2px; }
 ins.diff-add     { background: var(--diff-add-bg); color: var(--diff-add-text); text-decoration: none; border-radius: 3px; padding: 0 2px; }
 del.diff-del     { background: var(--diff-del-bg); color: var(--diff-del-text); border-radius: 3px; padding: 0 2px; }
 span.note        { color: var(--text-3); font-size: 11px; cursor: help; border-bottom: 1px dashed var(--border-strong); }
+/* ラベル（rt）は本文の下。下線は <rb> に引く（<ruby> に引くとラベルが線に重なる） */
 ruby.svoc        { ruby-position: under; }
-ruby.svoc rt     { font-size: 9px; font-weight: 700; letter-spacing: 0; }
-ruby.svoc-s      { border-bottom: 2px solid var(--c-s); }
+ruby.svoc rt     { font-size: 9px; font-weight: 700; letter-spacing: 0; padding-top: 3px; }
+ruby.svoc-s rb   { border-bottom: 2px solid var(--c-s); }
 ruby.svoc-s rt   { color: var(--c-s); }
-ruby.svoc-v      { border-bottom: 2px solid var(--c-v); }
+ruby.svoc-v rb   { border-bottom: 2px solid var(--c-v); }
 ruby.svoc-v rt   { color: var(--c-v); }
-ruby.svoc-o      { border-bottom: 2px solid var(--c-o); }
+ruby.svoc-o rb   { border-bottom: 2px solid var(--c-o); }
 ruby.svoc-o rt   { color: var(--c-o); }
-ruby.svoc-c      { border-bottom: 2px solid var(--c-c); }
+ruby.svoc-c rb   { border-bottom: 2px solid var(--c-c); }
 ruby.svoc-c rt   { color: var(--c-c); }
-ruby.svoc-m      { border-bottom: 1.5px dashed var(--c-m); }
+ruby.svoc-m rb   { border-bottom: 1.5px dashed var(--c-m); }
 ruby.svoc-m rt   { color: var(--c-m); }
 
 .tip-pos-label { color: #7cc7ff; font-size: 12px; }
