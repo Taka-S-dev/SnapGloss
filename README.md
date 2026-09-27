@@ -3,7 +3,6 @@
 [![Test](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/test.yml/badge.svg)](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/test.yml)
 [![Release](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/release.yml/badge.svg)](https://github.com/Taka-S-dev/SnapGloss/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/Taka-S-dev/SnapGloss?include_prereleases)](https://github.com/Taka-S-dev/SnapGloss/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ブラウザでも Word でも、アプリを問わずテキストを選んでホットキーを押すだけ。翻訳・要約・文法解析・自由質問をその場で即実行し、結果をストリーミング表示します。
 
@@ -29,7 +28,7 @@
 - **追加質問スレッド** — 結果に対して会話形式で深掘り。文法解説モードでは引用箇所を本文中にハイライト
 - **単語ツールチップ** — 対訳の原文で単語をクリック／選択すると訳・品詞・読み上げをポップアップ
 - **右クリックメニュー** — 選択箇所を Web 検索、または「この部分について質問」
-- **履歴** — 直近 20 件の結果を API を叩かずに再表示
+- **履歴** — 直近 20 件の結果を API を呼ばずに再表示
 - **リッチな描画** — Markdown（表・見出し・引用・コード）と mermaid 図を自動レンダリング
 - **ライト／ダークテーマ** — OS 設定に追従、手動切替も可能
 - **ホットキー即実行** — モード選択を飛ばして指定モードで即処理するオプション

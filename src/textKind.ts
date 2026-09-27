@@ -1,5 +1,5 @@
 // 取り込んだテキストの種類。種類ごとに既定モードを持ち、ホットキーで即実行するときの
-// モード選択に使う（settings.defaultModes）。判定は文字種の比率だけで行い、API は叩かない
+// モード選択に使う（settings.defaultModes）。判定は文字種の比率だけで行い、API は呼ばない
 export type TextKind = "word" | "en" | "ja" | "other";
 
 export const TEXT_KIND_LABELS: Record<TextKind, string> = {

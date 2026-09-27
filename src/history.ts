@@ -23,7 +23,7 @@ export function getHistory(): HistoryEntry[] {
   }
 }
 
-/** 同じ原文を同じモードで処理した結果が履歴にあればそれを返す（モード切替時に API を叩かないため） */
+/** 同じ原文を同じモードで処理した結果が履歴にあればそれを返す（モード切替時に API を呼ばないため） */
 export function findHistory(input: string, mode: string): HistoryEntry | undefined {
   return getHistory().find(e => e.mode === mode && e.input === input);
 }

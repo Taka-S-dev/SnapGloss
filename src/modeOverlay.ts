@@ -137,7 +137,7 @@ export function consumePendingCancel(): boolean {
   return c;
 }
 
-/** 取得待ちの状態に、届いたテキストを流し込む */
+/** 取得待ちの状態に、届いたテキストを入れる */
 export function fillPendingText(text: string) {
   const ta = $("mo-text") as HTMLTextAreaElement;
   const search = $("mo-search") as HTMLInputElement;

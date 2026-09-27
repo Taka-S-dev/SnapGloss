@@ -6,7 +6,7 @@ import { findHistory, restoreEntry } from "./history";
 import { detectTextKind, TEXT_KIND_LABELS } from "./textKind";
 import { showModeOverlay } from "./modeOverlay";
 
-// ツールバーのモード名をクリックすると開く小さなメニュー。
+// 下のバーのモード名をクリックすると開く小さなメニュー。
 // 「まず既定で実行し、違えばここで切り替える」ための導線。本文のレイアウトには触らない
 // （行を差し込むと完了時に本文が動いて画面が切り替わったように見える）。
 // 切り替えは常に一時的で、既定を変えるのは「既定にする」を押したときだけ。
@@ -15,7 +15,7 @@ const PIN_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" st
 
 function closeMenu() { $("mode-menu").classList.remove("open"); }
 
-/** 別モードで処理し直す。同じ原文を同じモードで処理済みなら API を叩かずに履歴から出す */
+/** 別モードで処理し直す。同じ原文を同じモードで処理済みなら API を呼ばずに履歴から出す */
 function switchMode(p: Prompt) {
   closeMenu();
   const call = state.lastCall;

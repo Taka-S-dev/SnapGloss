@@ -232,7 +232,7 @@ async function init() {
   $("content").style.fontSize = state.fontSize + "px";
   $("content-followup").style.fontSize = state.followupFontSize + "px";
 
-  // ツールバー
+  // 下のバーのボタン
   $("copy-btn").addEventListener("click", async () => {
     if (!state.rawText) return;
     await writeText(toPlainText(state.rawText));

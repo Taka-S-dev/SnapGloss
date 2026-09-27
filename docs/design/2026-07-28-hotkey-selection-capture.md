@@ -101,7 +101,7 @@ Ctrl+C 送信前に `GetClipboardSequenceNumber()` を控え、送信後は番�
 
 ## テスト
 
-Win32 API を叩く 2 つのポーリング関数はユニットテストできない。ロジックを持たせないのは
+Win32 API を呼ぶ 2 つのポーリング関数はユニットテストできない。ロジックを持たせないのは
 このため。`decide_text` には [lib.rs](../../src-tauri/src/lib.rs) の既存
 `#[cfg(test)] mod html_to_markdown_tests` と同じ形でテストを付ける。
 
