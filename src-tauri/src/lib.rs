@@ -1,7 +1,4 @@
-use enigo::{
-    Direction::{Press, Release},
-    Enigo, Key, Keyboard, Settings,
-};
+use enigo::{Direction::Release, Enigo, Key, Keyboard, Settings};
 use std::{thread, time::{Duration, Instant}};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -520,6 +517,32 @@ fn wait_for_modifiers_released(timeout: Duration) -> bool {
 #[cfg(not(target_os = "windows"))]
 fn wait_for_modifiers_released(_timeout: Duration) -> bool { false }
 
+/// Alt を含むホットキーの後始末。ホットキーの本キー（Alt+T の T）は OS が飲み込むので、
+/// 前面アプリには「Alt を押して何も押さず離した」だけが届く。Win32 アプリではそれが
+/// メニューバー起動の操作なので、アプリはメニュー待ちに入り、続く Ctrl+C がテキスト欄に
+/// 届かない。Alt が離される前に無害なキー（VK 0xFF。どのアプリも無視する）を 1 回挟むと
+/// 「Alt 単独」ではなくなり、メニューが起動しない。AutoHotkey の A_MenuMaskKey と同じ手法
+#[cfg(target_os = "windows")]
+fn send_menu_mask_key() {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU,
+    };
+    // Alt が押されていなければ不要（Ctrl+Shift+Z 等）
+    if unsafe { GetAsyncKeyState(VK_MENU as i32) } as u16 & 0x8000 == 0 { return; }
+    let key = |flags: u32| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: windows_sys::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+            ki: KEYBDINPUT { wVk: 0xFF, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 },
+        },
+    };
+    let inputs = [key(0), key(KEYEVENTF_KEYUP)];
+    unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32); }
+    debug_log("alt held at hotkey: sent menu mask key (vk 0xff)");
+}
+
+#[cfg(not(target_os = "windows"))]
+fn send_menu_mask_key() {}
+
 #[cfg(target_os = "windows")]
 fn clipboard_sequence() -> u32 {
     use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
@@ -615,7 +638,44 @@ fn show_main_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
 /// 押下・離上の間に間隔を入れないと、入力キューの処理が追いつかないアプリが
 /// 修飾なしの `c` として受け取ったり丸ごと取りこぼしたりする（Fork のコミット
 /// メッセージ欄で発生）。60ms の追加は体感できない範囲。
+///
+/// Windows では enigo を使わず自前で SendInput する。enigo の `Key::Unicode('c')` は
+/// KEYEVENTF_UNICODE（VK_PACKET）で送るため、アプリには「仮想キー C」ではなく
+/// 「文字 c」として届く。編集コントロールは WM_CHAR(0x03) で偶然コピーになるが、
+/// アクセラレータや独自のキー処理で VK_C を見ているペイン（Fork の一覧・差分など）では
+/// Ctrl+C と認識されず、クリップボードが一切動かない。仮想キー＋スキャンコードで送れば
+/// 物理キーと同じ経路で届く
+#[cfg(target_os = "windows")]
+fn send_ctrl_c(_enigo: &mut Enigo) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+        MAPVK_VK_TO_VSC, VK_CONTROL,
+    };
+    const VK_C: u16 = 0x43;
+    let key = |vk: u16, flags: u32| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: unsafe { MapVirtualKeyW(vk as u32, MAPVK_VK_TO_VSC) } as u16,
+                dwFlags: flags, time: 0, dwExtraInfo: 0,
+            },
+        },
+    };
+    let gap = Duration::from_millis(20);
+    let one = |input: INPUT| unsafe { SendInput(1, &input, std::mem::size_of::<INPUT>() as i32); };
+    one(key(VK_CONTROL, 0));
+    thread::sleep(gap);
+    one(key(VK_C, 0));
+    thread::sleep(gap);
+    one(key(VK_C, KEYEVENTF_KEYUP));
+    thread::sleep(gap);
+    one(key(VK_CONTROL, KEYEVENTF_KEYUP));
+}
+
+#[cfg(not(target_os = "windows"))]
 fn send_ctrl_c(enigo: &mut Enigo) {
+    use enigo::Direction::Press;
     let gap = Duration::from_millis(20);
     let _ = enigo.key(Key::Control, Press);
     thread::sleep(gap);
@@ -644,9 +704,9 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
         let prev_clipboard = app.clipboard().read_text().ok().unwrap_or_default();
 
         debug_log(&format!(
-            "hotkey fired: mode={} foreground={} prev_clipboard_len={}",
+            "hotkey fired: mode={} foreground={} prev_clipboard_len={} {}",
             match mode { Capture::SendCopy => "send_copy", Capture::ClipboardOnly => "clipboard_only", Capture::Skip => "skip" },
-            foreground_process_name(), prev_clipboard.chars().count()
+            foreground_process_name(), prev_clipboard.chars().count(), foreground_focus_info()
         ));
 
         // コピー開始を検知した時点でウィンドウを出す。取得完了まで 1 秒以上かかることがあり、
@@ -664,9 +724,14 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
         let text = if mode == Capture::Skip {
             String::new()
         } else if mode == Capture::SendCopy {
+            // Alt が離される前に済ませる必要があるので、待つより先に送る
+            send_menu_mask_key();
             let released = wait_for_modifiers_released(Duration::from_millis(400));
+            // Alt の解放を前景アプリが処理し終える前に Ctrl を押すと、同じ入力バッチとして
+            // 扱われて Alt+Ctrl+C 相当に化けることがある。物理キーの解放から一呼吸おく
+            thread::sleep(Duration::from_millis(50));
             let before_seq = clipboard_sequence();
-            debug_log(&format!("modifiers_released={released} before_seq={before_seq}"));
+            debug_log(&format!("modifiers_released={released} before_seq={before_seq} {}", foreground_focus_info()));
             let mut enigo = Enigo::new(&Settings::default()).ok();
             let enigo_ok = enigo.is_some();
             if let Some(enigo) = enigo.as_mut() {
@@ -685,12 +750,13 @@ fn hotkey_handler(app: &AppHandle, mode: Capture) {
             // 1 回目が届かないことがある（前景アプリが入力キューを処理しきる前に
             // キーが通り過ぎる）。クリップボードが動いていなければもう一度だけ送る
             if copied.is_none() {
-                if let Some(enigo) = enigo.as_mut() {
-                    debug_log("no clipboard change in 600ms, retrying ctrl+c");
-                    send_ctrl_c(enigo);
-                    copied = wait_for_copied_text(&app, before_seq, Duration::from_millis(1200), || {
-                        show_pending(&app, &mut shown);
-                    });
+                if !clipboard_changed_since(before_seq) {
+                    if let Some(enigo) = enigo.as_mut() {
+                        debug_log("no clipboard change in 600ms, retrying ctrl+c");
+                        send_ctrl_c(enigo);
+                    }
+                } else {
+                    debug_log("copy started but text not readable in 600ms, waiting without resending");
                 }
             }
             let changed = copied.is_some();
@@ -747,6 +813,40 @@ fn foreground_process_name() -> String {
 
 #[cfg(not(target_os = "windows"))]
 fn foreground_process_name() -> String { String::new() }
+
+/// 診断用：前景ウィンドウのタイトル、フォーカスのあるコントロールのクラス名、
+/// マウスボタンが押されたままか。取りこぼしが「どのペインで」「どんな状態で」
+/// 起きたかをログに残す（ドラッグ選択の途中でホットキーを押すと選択が確定していない、
+/// 独自描画のペインにフォーカスがある、などを切り分ける）
+#[cfg(target_os = "windows")]
+fn foreground_focus_info() -> String {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowTextW, GetWindowThreadProcessId, GUITHREADINFO,
+    };
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd == 0 { return "no foreground".into(); }
+        let mut title = [0u16; 128];
+        let n = GetWindowTextW(hwnd, title.as_mut_ptr(), title.len() as i32);
+        let title = String::from_utf16_lossy(&title[..n.max(0) as usize]);
+        let tid = GetWindowThreadProcessId(hwnd, std::ptr::null_mut());
+        let mut gti: GUITHREADINFO = std::mem::zeroed();
+        gti.cbSize = std::mem::size_of::<GUITHREADINFO>() as u32;
+        let mut focus_class = String::from("?");
+        if GetGUIThreadInfo(tid, &mut gti) != 0 && gti.hwndFocus != 0 {
+            let mut cls = [0u16; 128];
+            let n = GetClassNameW(gti.hwndFocus, cls.as_mut_ptr(), cls.len() as i32);
+            focus_class = String::from_utf16_lossy(&cls[..n.max(0) as usize]);
+        }
+        let mouse_down = GetAsyncKeyState(VK_LBUTTON as i32) as u16 & 0x8000 != 0
+            || GetAsyncKeyState(VK_RBUTTON as i32) as u16 & 0x8000 != 0;
+        format!("title=\"{}\" focus_class={} mouse_down={}", title.chars().take(60).collect::<String>(), focus_class, mouse_down)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn foreground_focus_info() -> String { String::new() }
 
 /// 前景ウィンドウが SnapGloss 自身か
 #[cfg(target_os = "windows")]
