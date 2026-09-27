@@ -184,6 +184,28 @@ fn set_settings(app: AppHandle, json: String) -> Result<(), String> {
     Ok(())
 }
 
+/// ウィンドウが今いるモニターの作業領域からはみ出していれば、はみ出した分だけ位置をずらす。
+/// 設定・履歴などのオーバーレイのためにフロントがウィンドウを一時的に広げた直後に呼ぶ
+/// （画面の下や右に寄せて使っていると、広げた分が画面外に出る）
+#[tauri::command]
+fn fit_window_in_monitor(app: AppHandle) -> Result<(), String> {
+    let win = app.get_webview_window("main").ok_or("main window not found")?;
+    let pos = win.outer_position().map_err(|e| e.to_string())?;
+    let size = win.outer_size().map_err(|e| e.to_string())?;
+    let Some(monitor) = win.current_monitor().map_err(|e| e.to_string())? else { return Ok(()) };
+    let area = monitor.work_area();
+    let min_x = area.position.x;
+    let min_y = area.position.y;
+    let max_x = (min_x + area.size.width as i32 - size.width as i32).max(min_x);
+    let max_y = (min_y + area.size.height as i32 - size.height as i32).max(min_y);
+    let x = pos.x.clamp(min_x, max_x);
+    let y = pos.y.clamp(min_y, max_y);
+    if (x, y) != (pos.x, pos.y) {
+        win.set_position(tauri::PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// 既定の「選択範囲を自動取得しない」アプリ。
 ///
 /// 載せる基準は「Ctrl+C がコピーではなく実行中プロセスへの割り込みになる」こと、
@@ -970,7 +992,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![hide_window, show_window, register_shortcut, get_api_key, set_api_key, get_settings, set_settings, default_excluded_apps, write_text_file, read_text_file])
+        .invoke_handler(tauri::generate_handler![hide_window, show_window, register_shortcut, get_api_key, set_api_key, get_settings, set_settings, default_excluded_apps, fit_window_in_monitor, write_text_file, read_text_file])
         .setup(|app| {
             // 設定を読むより先に、旧フォルダからの引き継ぎを済ませる
             migrate_legacy_config_dir(app.handle());

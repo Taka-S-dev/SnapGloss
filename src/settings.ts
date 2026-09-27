@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
+import { enlargeForOverlay, restoreAfterOverlay } from "./windowFit";
 import { z } from "zod";
 import { DEFAULT_PROMPTS, type Prompt, type Settings } from "./state";
 import { he } from "./renderer";
@@ -361,6 +362,7 @@ async function doSaveSettings() {
 }
 
 export async function openSettings() {
+  await enlargeForOverlay();
   const s = loadSettings();
   ($("s-apikey")   as HTMLInputElement).value  = await invoke<string>("get_api_key");
   ($("s-endpoint") as HTMLInputElement).value  = s.endpoint;
@@ -381,6 +383,7 @@ export async function openSettings() {
 
 export function closeSettings() {
   $("settings-overlay").classList.remove("open");
+  void restoreAfterOverlay();
 }
 
 export function initSettingsModal() {

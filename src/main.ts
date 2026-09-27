@@ -8,6 +8,7 @@ import { loadSettings, initSettings } from "./settings";
 import { FONT_BASE, FONT_MIN, FONT_MAX, PANE_MIN_HEIGHT, COPY_FEEDBACK_MS, FONT_INDICATOR_MS } from "./constants";
 import { $, setLoading, resetContent, clearFollowupThread } from "./ui";
 import { openSettings, closeSettings, initSettingsModal, applyTheme } from "./settings";
+import { enlargeForOverlay, restoreAfterOverlay, isTemporaryResize, SANE_MIN_W, SANE_MIN_H } from "./windowFit";
 import { showModeOverlay, closeModeOverlay, initModeOverlay, runLastMode, runPrompt, resolveAutoRunPrompt,
          setModePending, isModePending, fillPendingText, consumePendingCancel } from "./modeOverlay";
 import { initWordTooltip } from "./tooltip";
@@ -168,13 +169,18 @@ async function init() {
   // ウィンドウサイズを復元
   const savedW = parseInt(localStorage.getItem("snap-gloss:winW") ?? "0");
   const savedH = parseInt(localStorage.getItem("snap-gloss:winH") ?? "0");
-  if (savedW > 0 && savedH > 0) {
-    getCurrentWindow().setSize(new LogicalSize(savedW, savedH)).catch(() => {});
+  // 異常に小さい保存値（過渡状態で保存されたもの）は使わず、設定の既定サイズのままにする
+  if (savedW >= SANE_MIN_W && savedH >= SANE_MIN_H) {
+    // 失敗は権限不足（capabilities の core:window:allow-set-size）がほぼ唯一の原因なので、黙らせない
+    getCurrentWindow().setSize(new LogicalSize(savedW, savedH)).catch(e => console.error("setSize failed:", e));
   }
   let _resizeTimer: ReturnType<typeof setTimeout> | null = null;
   window.addEventListener("resize", () => {
     if (_resizeTimer) clearTimeout(_resizeTimer);
     _resizeTimer = setTimeout(() => {
+      // オーバーレイのための一時的な拡大と、過渡状態の異常な小ささは保存しない
+      if (isTemporaryResize()) return;
+      if (window.innerWidth < SANE_MIN_W || window.innerHeight < SANE_MIN_H) return;
       localStorage.setItem("snap-gloss:winW", String(window.innerWidth));
       localStorage.setItem("snap-gloss:winH", String(window.innerHeight));
     }, 400);
@@ -215,12 +221,14 @@ async function init() {
     showFontIndicator(Math.round((state.fontSize / FONT_BASE) * 100));
   }, { passive: false });
   $("settings-btn").addEventListener("click", openSettings);
-  // 即実行オプション使用時の逃げ道：モード名クリックでモード選択を開く
-  $("mode-label").title = "クリックでモード選択を開く";
-  $("mode-label").addEventListener("click", () => showModeOverlay(state.lastCall?.text ?? ""));
-  $("help-btn").addEventListener("click", () => $("help-overlay").classList.toggle("open"));
+  // モード名クリックの挙動は modeTabs.ts（切替メニュー）が持つ
+  const openHelp  = () => { void enlargeForOverlay(); $("help-overlay").classList.add("open"); };
+  const closeHelp = () => { $("help-overlay").classList.remove("open"); void restoreAfterOverlay(); };
+  $("help-btn").addEventListener("click", () => {
+    if ($("help-overlay").classList.contains("open")) closeHelp(); else openHelp();
+  });
   $("help-overlay").addEventListener("click", e => {
-    if (e.target === $("help-overlay")) $("help-overlay").classList.remove("open");
+    if (e.target === $("help-overlay")) closeHelp();
   });
   $("retry-btn").addEventListener("click", () => {
     if (!state.lastCall) return;
@@ -255,7 +263,8 @@ async function init() {
       if ($("mode-overlay").classList.contains("open"))     { closeModeOverlay(); invoke("hide_window"); }
       else if ($("settings-overlay").classList.contains("open")) closeSettings();
       else if (isHistoryOpen()) closeHistory();
-      else if ($("help-overlay").classList.contains("open")) $("help-overlay").classList.remove("open");
+      else if ($("help-overlay").classList.contains("open")) { $("help-overlay").classList.remove("open"); void restoreAfterOverlay(); }
+      else if (closeComposerIfEmpty()) { /* 入力行を畳んだだけ。ウィンドウは残す */ }
       else { resetContent(loadSettings().hotkey); invoke("hide_window"); }
     } else if (e.key === "c" && e.ctrlKey && !e.shiftKey && !e.altKey) {
       if (state.rawText && !window.getSelection()?.toString()) {

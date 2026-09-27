@@ -2,6 +2,7 @@ import { state } from "./state";
 import { buildHtml } from "./renderer";
 import { $, updateContent } from "./ui";
 import { HISTORY_MAX } from "./constants";
+import { enlargeForOverlay, restoreAfterOverlay } from "./windowFit";
 
 export interface HistoryEntry {
   mode: string;
@@ -115,6 +116,7 @@ function resetClearButton() {
 }
 
 export function openHistory() {
+  void enlargeForOverlay();
   resetClearButton();
   renderList();
   $("history-overlay").classList.add("open");
@@ -123,6 +125,7 @@ export function openHistory() {
 export function closeHistory() {
   resetClearButton();
   $("history-overlay").classList.remove("open");
+  void restoreAfterOverlay();
 }
 
 export function isHistoryOpen(): boolean {
