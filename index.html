@@ -118,6 +118,7 @@
         <div id="tab-prompts" class="s-tab-content" style="display:none">
           <div class="p-tools">
             <button id="prompts-add">＋ プロンプトを追加</button>
+            <button id="prompts-restore" title="消した既定プロンプトを追加し直し、既定と同名のプロンプトの本文を既定に戻します。自作のプロンプトはそのまま">既定プロンプトを復元</button>
             <button id="prompts-export" title="プロンプトを含む設定一式（APIキー除く）を JSON ファイルに書き出し">エクスポート</button>
             <button id="prompts-import" title="JSON ファイルを選んでフォームに読み込み（「保存」で確定）">インポート</button>
           </div>
@@ -176,6 +177,7 @@
           <ul>
             <li>時計アイコン：履歴（直近20件）の再表示・削除</li>
             <li>設定のプロンプトタブから設定一式を JSON ファイルにエクスポート／インポート（APIキーは含まれない）</li>
+            <li>プロンプトを書き換えた／消した後は、各行の「既定に戻す」か「既定プロンプトを復元」で元に戻せる（自作のプロンプトはそのまま）</li>
             <li>回答に mermaid 図・表・コードが含まれる場合は自動でレンダリング</li>
             <li>完全終了はタスクトレイの「終了」から</li>
           </ul>

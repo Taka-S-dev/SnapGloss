@@ -126,17 +126,67 @@ export function saveSettings(s: Settings): void {
 
 // ── Settings modal ────────────────────────────────────────────────────────────
 
+function defaultPromptText(name: string): string | undefined {
+  return DEFAULT_PROMPTS.find(p => p.name === name)?.text;
+}
+
 function makePromptRow(name: string, text: string): HTMLElement {
   const row = document.createElement("div");
   row.className = "p-row";
   row.innerHTML = `
     <div class="p-header">
       <input class="p-name" type="text" value="${he(name)}" placeholder="プロンプト名">
+      <button class="p-reset" title="本文を既定のプロンプトに戻す">既定に戻す</button>
       <button class="p-del">削除</button>
     </div>
     <textarea class="p-text" rows="3">${he(text)}</textarea>`;
+  const nameEl = row.querySelector(".p-name") as HTMLInputElement;
+  const textEl = row.querySelector(".p-text") as HTMLTextAreaElement;
+  const reset  = row.querySelector(".p-reset") as HTMLButtonElement;
+  // 既定プロンプトと同じ名前の行にだけ「既定に戻す」を出す。既に既定どおりなら押せない
+  const refresh = () => {
+    const def = defaultPromptText(nameEl.value.trim());
+    reset.style.display = def === undefined ? "none" : "";
+    reset.disabled = def !== undefined && textEl.value === def;
+  };
+  nameEl.addEventListener("input", refresh);
+  textEl.addEventListener("input", refresh);
+  reset.addEventListener("click", () => {
+    const def = defaultPromptText(nameEl.value.trim());
+    if (def === undefined) return;
+    textEl.value = def;
+    refresh();
+  });
+  refresh();
   row.querySelector(".p-del")!.addEventListener("click", () => row.remove());
   return row;
+}
+
+// 消した既定プロンプトを追加し直し、既定名の行の本文を既定に戻す。自作プロンプトは触らない。
+// フォーム上の操作なので「保存」を押すまで確定しない
+function restoreDefaultPrompts() {
+  const rows = Array.from(document.querySelectorAll<HTMLElement>(".p-row"));
+  const present = new Set<string>();
+  let reset = 0;
+  for (const row of rows) {
+    const name = (row.querySelector(".p-name") as HTMLInputElement).value.trim();
+    const def = defaultPromptText(name);
+    if (def === undefined) continue;
+    present.add(name);
+    const textEl = row.querySelector(".p-text") as HTMLTextAreaElement;
+    if (textEl.value !== def) {
+      textEl.value = def;
+      textEl.dispatchEvent(new Event("input"));
+      reset++;
+    }
+  }
+  let added = 0;
+  for (const p of DEFAULT_PROMPTS) {
+    if (present.has(p.name)) continue;
+    $("prompts-list").appendChild(makePromptRow(p.name, p.text));
+    added++;
+  }
+  settingsMsg(`既定プロンプトを復元しました（本文を戻した: ${reset} 件、追加し直した: ${added} 件）。「保存」で確定します`, true);
 }
 
 function renderPrompts(prompts: Prompt[]) {
@@ -500,6 +550,7 @@ export function initSettingsModal() {
   $("s-excluded-reset").addEventListener("click", () => setExcludedApps(defaultExcludedApps()));
   $("s-autorun").addEventListener("change", syncDefaultModesEnabled);
   $("prompts-add").addEventListener("click", () => $("prompts-list").appendChild(makePromptRow("", "")));
+  $("prompts-restore").addEventListener("click", restoreDefaultPrompts);
   $("prompts-export").addEventListener("click", exportSettings);
   $("prompts-import").addEventListener("click", importSettings);
   document.querySelectorAll<HTMLElement>(".s-tab").forEach(btn => {

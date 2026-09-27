@@ -464,6 +464,10 @@ select option { background: var(--bg-panel); color: var(--text); }
 .p-name:focus { border-color: var(--accent); }
 .p-del { padding: 3px 8px; border: 1px solid var(--danger-text); border-radius: 4px; background: var(--bg-panel); cursor: pointer; font-size: 11px; color: var(--danger-text); font-family: inherit; transition: background .15s; }
 .p-del:hover { background: var(--danger-bg); }
+/* 既定プロンプトと同名の行にだけ出る。既定どおりの本文なら押せない */
+.p-reset { padding: 3px 8px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--bg-panel); cursor: pointer; font-size: 11px; color: var(--text-2); font-family: inherit; transition: background .15s; white-space: nowrap; }
+.p-reset:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.p-reset:disabled { color: var(--text-4); border-color: var(--border); cursor: default; }
 .p-text { width: 100%; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 4px; font-size: 12px; font-family: inherit; resize: vertical; min-height: 60px; outline: none; background: var(--bg-panel); color: var(--text); }
 .p-text:focus { border-color: var(--accent); }
 
