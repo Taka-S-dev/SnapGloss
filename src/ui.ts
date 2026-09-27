@@ -1,11 +1,18 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { state } from "./state";
 import { NOTICE_DURATION_MS } from "./constants";
 import { renderMermaidIn } from "./mermaidRender";
 
 export const $ = (id: string) => document.getElementById(id)!;
 
+/** モード名を下のバーのチップとウィンドウタイトルに出す（上のツールバーは無い） */
+function setModeLabel(mode: string) {
+  $("mode-label").textContent = mode;
+  getCurrentWindow().setTitle(mode ? `SnapGloss — ${mode}` : "SnapGloss")
+    .catch(e => console.error("setTitle failed:", e));
+}
+
 export function setLoading(on: boolean, label = "処理中…") {
-  $("loading-bar").style.display = on ? "block" : "none";
   $("loading-overlay").classList.toggle("on", on);
   $("loading-label").textContent = on ? label : "";
   ($("followup-send") as HTMLButtonElement).disabled = on;
@@ -48,7 +55,7 @@ export function updateContent(html: string, mode: string) {
   c.innerHTML = html;
   wrapWordsInContent(c);
   void renderMermaidIn(c);
-  $("mode-label").textContent = mode;
+  setModeLabel(mode);
   $("error-box").style.display = "none";
   $("notice").style.display = "none";
   // モード切替メニュー（modeTabs.ts）は api.ts より上位に置けない（循環になる）ので、イベントで知らせる
@@ -58,13 +65,15 @@ export function updateContent(html: string, mode: string) {
   c.style.flex = "";
   $("content-followup").innerHTML = "";
   // ボタン自体の textContent を書き換えるとアイコンとラベル要素が消えるので、ラベルだけ戻す
-  $("copy-label").textContent = "コピー";
+  $("copy-label").textContent = "";
   $("copy-btn").classList.remove("copied");
   const fi = $("followup-input") as HTMLTextAreaElement;
   fi.value = "";
   fi.style.height = "auto";
+  // 新しい結果では入力行を畳んで「AIに質問」ボタンに戻す（打ち始めれば main.ts が開く）
+  $("followup-area").classList.remove("has-text", "composing");
   c.scrollTop = 0;
-  setTimeout(() => ($("followup-input") as HTMLInputElement).focus(), 50);
+  fi.blur();
 }
 
 export function resetContent(hotkeyStr = "ctrl+shift+z") {
@@ -76,9 +85,9 @@ export function resetContent(hotkeyStr = "ctrl+shift+z") {
   $("content-followup").innerHTML = "";
   $("wrapper").classList.remove("split", "chat");
   ($("content") as HTMLElement).style.flex = "";
-  $("followup-area").classList.remove("visible");
+  $("followup-area").classList.remove("visible", "composing", "has-text");
   $("error-box").style.display = "none";
-  $("mode-label").textContent = "";
+  setModeLabel("");
 }
 
 const CHAT_EMPTY_HINT = `<div class="chat-empty">質問を入力して Enter で送信</div>`;
@@ -94,12 +103,14 @@ export function enterChatMode() {
   $("wrapper").classList.remove("split");
   $("wrapper").classList.add("chat");
   ($("content") as HTMLElement).style.flex = "";
-  $("mode-label").textContent = "チャット";
+  setModeLabel("チャット");
   $("error-box").style.display = "none";
-  $("followup-area").classList.add("visible");
+  // チャットは入力が主役なので入力行を開いたままにする
+  $("followup-area").classList.add("visible", "composing");
   const fi = $("followup-input") as HTMLTextAreaElement;
   fi.value = "";
   fi.style.height = "auto";
+  $("followup-area").classList.remove("has-text");
   setTimeout(() => fi.focus(), 50);
 }
 

@@ -25,9 +25,49 @@ function showCopyFeedback() {
   btn.classList.add("copied");
   if (_copyTimer) clearTimeout(_copyTimer);
   _copyTimer = setTimeout(() => {
-    $("copy-label").textContent = "コピー";
+    $("copy-label").textContent = "";
     btn.classList.remove("copied");
   }, COPY_FEEDBACK_MS);
+}
+
+// 追加質問の入力行は、読んでいる間は畳んで「AIに質問」ボタンだけにしておき、
+// ボタン・文字入力・Enter のいずれかで開く。空のまま Esc で閉じる
+function isComposing(): boolean { return $("followup-area").classList.contains("composing"); }
+
+function openComposer(prefill = "") {
+  const area = $("followup-area");
+  if (!area.classList.contains("visible")) return;
+  const input = $("followup-input") as HTMLTextAreaElement;
+  area.classList.add("composing");
+  if (prefill) {
+    input.value += prefill;
+    area.classList.add("has-text");
+  }
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function closeComposerIfEmpty(): boolean {
+  const input = $("followup-input") as HTMLTextAreaElement;
+  if (!isComposing() || input.value.trim()) return false;
+  // 会話が続いている間（スプリット表示・チャット）は畳まない
+  if ($("wrapper").classList.contains("split") || $("wrapper").classList.contains("chat")) return false;
+  input.value = "";
+  $("followup-area").classList.remove("composing", "has-text");
+  input.blur();
+  return true;
+}
+
+// 本文を読んでいるときに文字を打ち始めたら、その文字ごと入力行を開く
+function shouldOpenComposerOnKey(e: KeyboardEvent): boolean {
+  if (!$("followup-area").classList.contains("visible") || isComposing()) return false;
+  if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return false;
+  const t = e.target as HTMLElement | null;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return false;
+  for (const id of ["mode-overlay", "settings-overlay", "help-overlay", "history-overlay"]) {
+    if ($(id).classList.contains("open")) return false;
+  }
+  return e.key === "Enter" || e.key.length === 1;
 }
 
 function submitFollowup() {
@@ -39,6 +79,7 @@ function submitFollowup() {
   const mode = ($("followup-mode") as HTMLSelectElement).value as "qa" | "grammar";
   input.value = "";
   input.style.height = "auto";
+  $("followup-area").classList.remove("has-text");
   setLoading(true, mode === "grammar" ? "文法解析中…" : "追加質問中…");
   processFollowup(text, mode);
 }
@@ -249,12 +290,15 @@ async function init() {
   });
   $("followup-send").addEventListener("click", submitFollowup);
   $("followup-clear").addEventListener("click", clearFollowupThread);
+  $("ask-btn").addEventListener("click", () => openComposer());
   const followupInput = $("followup-input") as HTMLTextAreaElement;
   followupInput.addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitFollowup(); }
   });
-  // 入力量に応じて欄を伸ばす（上限は CSS の max-height）
+  // 入力量に応じて欄を伸ばす（上限は CSS の max-height）。
+  // 文字があるときだけバーを「入力中」の見た目にする（styles.css の .has-text）
   followupInput.addEventListener("input", () => {
+    $("followup-area").classList.toggle("has-text", followupInput.value.length > 0);
     followupInput.style.height = "auto";
     followupInput.style.height = followupInput.scrollHeight + "px";
   });
@@ -268,6 +312,9 @@ async function init() {
       else if ($("help-overlay").classList.contains("open")) { $("help-overlay").classList.remove("open"); void restoreAfterOverlay(); }
       else if (closeComposerIfEmpty()) { /* 入力行を畳んだだけ。ウィンドウは残す */ }
       else { resetContent(loadSettings().hotkey); invoke("hide_window"); }
+    } else if (shouldOpenComposerOnKey(e)) {
+      e.preventDefault();
+      openComposer(e.key === "Enter" ? "" : e.key);
     } else if (e.key === "c" && e.ctrlKey && !e.shiftKey && !e.altKey) {
       if (state.rawText && !window.getSelection()?.toString()) {
         e.preventDefault();

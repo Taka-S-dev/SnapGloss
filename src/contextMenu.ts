@@ -20,8 +20,10 @@ export function showContextMenu(x: number, y: number, query: string) {
   if (state.conv.lastResult) {
     menu.appendChild(menuItem(`この部分について質問：「${short}」`, () => {
       const input = $("followup-input") as HTMLTextAreaElement;
+      // 入力行は畳まれていることがあるので開いてから流し込む
+      $("followup-area").classList.add("composing");
       input.value = `「${query}」について、`;
-      input.dispatchEvent(new Event("input")); // 高さを引用文に合わせて伸ばす
+      input.dispatchEvent(new Event("input")); // 高さを引用文に合わせて伸ばし、has-text も付く
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
     }));

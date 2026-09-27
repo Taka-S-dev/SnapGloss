@@ -183,7 +183,6 @@ export async function processText(text: string, modeName: string, prompt: string
     const c = $("content");
     c.style.fontSize = state.fontSize + "px";
     c.innerHTML = html;
-    $("mode-label").textContent = modeName;
   });
   try {
     const result = await callApi(
