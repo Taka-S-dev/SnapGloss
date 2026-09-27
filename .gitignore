@@ -41,3 +41,21 @@
 # VSCode recommended extensions only
 !.vscode/
 !.vscode/extensions.json
+
+# Credentials, denied by exact name after the allows above so that an
+# allowed directory cannot carry one in. Exact names rather than
+# fragments: a *secret* pattern would also swallow a source file named
+# after the feature it implements, and git add would skip it in silence.
+.env
+.env.*
+**/secrets.json
+**/secrets.yml
+**/secrets.yaml
+**/credentials.json
+**/credentials.yml
+**/credentials.toml
+**/id_rsa
+**/*.pem
+**/*.key
+**/apikey
+.npmrc
