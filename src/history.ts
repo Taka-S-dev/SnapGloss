@@ -23,6 +23,11 @@ export function getHistory(): HistoryEntry[] {
   }
 }
 
+/** 同じ原文を同じモードで処理した結果が履歴にあればそれを返す（モード切替時に API を叩かないため） */
+export function findHistory(input: string, mode: string): HistoryEntry | undefined {
+  return getHistory().find(e => e.mode === mode && e.input === input);
+}
+
 export function addHistory(entry: HistoryEntry) {
   const list = [entry, ...getHistory()].slice(0, HISTORY_MAX);
   try {
@@ -41,7 +46,7 @@ function clearHistory() {
   localStorage.removeItem(KEY);
 }
 
-function restoreEntry(e: HistoryEntry) {
+export function restoreEntry(e: HistoryEntry) {
   state.rawText = e.result;
   state.conv = {
     prompt: e.prompt, inputText: e.input, lastResult: e.result, mode: e.mode,

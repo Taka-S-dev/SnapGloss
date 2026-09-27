@@ -170,6 +170,8 @@ export async function processText(text: string, modeName: string, prompt: string
     showNotice(`テキストが長いため先頭 ${TEXT_MAX_LENGTH} 文字のみ送信します`);
   }
   state.lastCall = { text, modeName, prompt };
+  // モードタブ（modeTabs.ts）を開始時点で今回のモードに合わせる。完了時は updateContent が知らせる
+  document.dispatchEvent(new CustomEvent("snap-gloss:result-started"));
   $("retry-box").style.display = "none";
   // 前回の会話のフォローアップ表示は新しい翻訳の開始時点で消す
   // （updateContent は完了時にしか呼ばれず、ストリーミング中に残ってしまうため）

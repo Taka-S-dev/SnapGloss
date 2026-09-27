@@ -84,8 +84,17 @@
             <label><input type="checkbox" id="s-autohide"> 他のアプリをクリックしたら自動でウィンドウを隠す</label>
           </div>
           <div class="s-row">
-            <label>ホットキーで即実行 <span style="font-size:11px;color:var(--text-3)">（モード選択を飛ばして指定モードで実行。モード名クリックで選択画面に戻れます）</span></label>
+            <label>ホットキーで即実行 <span style="font-size:11px;color:var(--text-3)">（モード選択を飛ばして実行。結果画面のタブで切り替え、モード名クリックで選択画面に戻れます）</span></label>
             <select id="s-autorun"></select>
+          </div>
+          <div class="s-row" id="s-default-modes" title="取り込んだテキストの種類を文字種から判定し、種類ごとにここで選んだモードで即実行します。結果画面の「既定にする」からも変更できます">
+            <label>テキストの種類ごとの既定モード <span style="font-size:11px;color:var(--text-3)">（上の「即実行」で「テキストの種類ごとの既定モード」を選ぶと有効）</span></label>
+            <div class="s-kind-grid">
+              <span>英単語・短いフレーズ</span><select id="s-default-word"></select>
+              <span>英語の文章</span><select id="s-default-en"></select>
+              <span>日本語の文章</span><select id="s-default-ja"></select>
+              <span>その他（コード・判定不能）</span><select id="s-default-other"></select>
+            </div>
           </div>
           <div class="s-row" title="ここに書いたアプリが前面のときは Ctrl+C を送らず、そのときのクリップボードの内容をそのまま使います。Ctrl+C がコピーではなく実行中コマンドの中断になるターミナルを想定しています">
             <label>
@@ -140,12 +149,14 @@
         <div class="help-body">
           <h4>基本の流れ</h4>
           <ul>
-            <li>テキストを選択して <kbd>ホットキー</kbd> → モード選択が開く</li>
-            <li><kbd>ホットキー ×2</kbd> 前回と同じモードで即実行</li>
+            <li>テキストを選択して <kbd>ホットキー</kbd> → テキストの種類（英単語／英文／日本語／その他）ごとの既定モードで即実行</li>
+            <li>下のバー左端のモード名をクリック → 別モードに切り替え／もう一度実行。同じ原文で処理済みのモードは API を呼ばず履歴から表示</li>
+            <li>同じメニューの「既定にする」で、その種類の既定モードを表示中のモードに変更</li>
+            <li>設定「ホットキーで即実行」をオフにすると従来どおりモード選択が開く。<kbd>ホットキー ×2</kbd> は前回と同じモードで即実行</li>
             <li><kbd>1</kbd>〜<kbd>9</kbd> でモードを一発選択（<kbd>↑↓</kbd> + <kbd>Enter</kbd> でも可）</li>
             <li>テキスト欄から <kbd>Ctrl+Enter</kbd> で選択中モードを実行</li>
             <li>テキスト欄の ✕ で空にして、翻訳と関係ない質問をすぐ入力</li>
-            <li>設定「ホットキーで即実行」でモード選択を省略可（ツールバーのモード名クリックで選択画面に戻れる）</li>
+            <li>メニューの「モード選択を開く…」で、直前のテキストのままモード選択画面に戻る</li>
           </ul>
           <h4>結果画面</h4>
           <ul>
@@ -216,5 +227,7 @@
         <button id="followup-clear" title="会話をクリア">✕</button>
       </div>
     </div>
+    <!-- モード名クリックで開くメニュー：既定で実行した結果を別モードに切り替える（本文のレイアウトには影響しない） -->
+    <div id="mode-menu"></div>
   </body>
 </html>

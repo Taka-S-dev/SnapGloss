@@ -51,6 +51,8 @@ export function updateContent(html: string, mode: string) {
   $("mode-label").textContent = mode;
   $("error-box").style.display = "none";
   $("notice").style.display = "none";
+  // モード切替メニュー（modeTabs.ts）は api.ts より上位に置けない（循環になる）ので、イベントで知らせる
+  document.dispatchEvent(new CustomEvent("snap-gloss:result-shown"));
   $("followup-area").classList.add("visible");
   $("wrapper").classList.remove("split", "chat");
   c.style.flex = "";
@@ -68,6 +70,7 @@ export function updateContent(html: string, mode: string) {
 export function resetContent(hotkeyStr = "ctrl+shift+z") {
   state.rawText = "";
   state.conv = { prompt: "", inputText: "", lastResult: "", mode: "", history: [] };
+  document.dispatchEvent(new CustomEvent("snap-gloss:result-cleared"));
   const hotkey = hotkeyStr.toUpperCase().replace(/\+/g, " + ");
   $("content").innerHTML = `<div id="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>テキストを選択して ${hotkey} を押すと処理されます</div>`;
   $("content-followup").innerHTML = "";
@@ -85,6 +88,7 @@ export function enterChatMode() {
   state.rawText = "";
   state.conv = { prompt: "", inputText: "", lastResult: "", mode: "チャット", history: [] };
   clearHighlights();
+  document.dispatchEvent(new CustomEvent("snap-gloss:result-cleared"));
   $("content").innerHTML = "";
   $("content-followup").innerHTML = CHAT_EMPTY_HINT;
   $("wrapper").classList.remove("split");

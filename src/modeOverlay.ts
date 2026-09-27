@@ -1,5 +1,6 @@
-import { type Prompt } from "./state";
+import { type Prompt, AUTO_RUN_BY_KIND, AUTO_RUN_LAST } from "./state";
 import { loadSettings } from "./settings";
+import { detectTextKind, looksLikeWord } from "./textKind";
 import { $, setLoading, enterChatMode } from "./ui";
 import { PENDING_INDICATOR_DELAY_MS } from "./constants";
 import { processText } from "./api";
@@ -71,11 +72,19 @@ export function runPrompt(text: string, p: Prompt) {
   selectMode(p.name, p.text);
 }
 
-/** 設定の「即実行」値からプロンプトを解決する。見つからなければ null */
-export function resolveAutoRunPrompt(autoRun: string): Prompt | null {
+/** テキストの種類に対する既定モードのプロンプト。設定のモード名が消えていれば null */
+export function defaultPromptFor(text: string): Prompt | null {
+  const s = loadSettings();
+  const name = s.defaultModes[detectTextKind(text)];
+  return s.prompts.find(pr => pr.name === name) ?? null;
+}
+
+/** 設定の「即実行」値からプロンプトを解決する。見つからなければ null（＝モード選択を出す） */
+export function resolveAutoRunPrompt(autoRun: string, text: string): Prompt | null {
   if (!autoRun) return null;
+  if (autoRun === AUTO_RUN_BY_KIND) return defaultPromptFor(text);
   const prompts = loadSettings().prompts;
-  const name = autoRun === "__last__" ? localStorage.getItem("snap-gloss:lastMode") ?? "" : autoRun;
+  const name = autoRun === AUTO_RUN_LAST ? localStorage.getItem("snap-gloss:lastMode") ?? "" : autoRun;
   return prompts.find(pr => pr.name === name) ?? null;
 }
 
@@ -137,9 +146,12 @@ export function closeModeOverlay() {
   $("mode-overlay").classList.remove("open");
 }
 
-// 1〜3語の英単語・英フレーズなら辞書モードを初期選択にする
-function looksLikeWord(text: string): boolean {
-  return /^[A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*){0,2}$/.test(text.trim());
+// テキスト欄の高さを中身に合わせる。上限は CSS 側（箱の max-height と flex）が決めるので
+// ここでは scrollHeight をそのまま入れるだけでよい。表示中でないと scrollHeight が 0 に
+// なるので、オーバーレイを開いてから呼ぶこと
+function fitTextarea(ta: HTMLTextAreaElement) {
+  ta.style.height = "auto";
+  ta.style.height = `${ta.scrollHeight + 2}px`; // +2 は上下 border
 }
 
 export function showModeOverlay(text: string) {
@@ -155,6 +167,7 @@ export function showModeOverlay(text: string) {
     const idx = prompts.findIndex(p => p.name === lastMode);
     if (idx >= 0) _activeIdx = idx;
   }
+  // 1〜3語の英単語・英フレーズなら辞書モードを初期選択にする
   if (looksLikeWord(text)) {
     const idx = prompts.findIndex(p => p.name.startsWith("辞書"));
     if (idx >= 0) _activeIdx = idx;

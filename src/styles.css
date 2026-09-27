@@ -189,6 +189,34 @@ select option { background: var(--bg-panel); color: var(--text); }
 #font-indicator.visible { opacity: 1; }
 #mode-label { margin-left: auto; font-size: 11px; color: var(--text-3); white-space: nowrap; cursor: pointer; border-radius: 4px; padding: 3px 6px; transition: background .12s, color .12s; }
 #mode-label:hover { background: var(--bg-hover); color: var(--text); }
+#mode-label:empty { display: none; }
+
+/* ── モード切替メニュー（下のバーのモード名の上に浮かぶ。レイアウトに影響しない） ── */
+#mode-menu {
+  display: none; position: fixed; bottom: 48px; left: 8px; z-index: 300;
+  min-width: 200px; padding: 4px; border-radius: 8px;
+  background: var(--bg-panel); border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 24px rgba(0,0,0,.25); user-select: none;
+  flex-direction: column;
+  /* ウィンドウの中にしか描けないので、低いウィンドウでは中でスクロールさせる */
+  max-height: calc(100vh - 56px); overflow-y: auto;
+}
+#mode-menu .mm-item { flex-shrink: 0; }
+#mode-menu.open { display: flex; }
+.mm-item {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 6px 10px; border: none; border-radius: 5px; text-align: left;
+  background: transparent; color: var(--text); cursor: pointer;
+  font-size: 12px; font-family: inherit; white-space: nowrap;
+  transition: background .1s;
+}
+.mm-item:hover { background: var(--bg-hover); }
+.mm-item.active { background: var(--accent); color: var(--on-accent); }
+/* 既定モードには印を付ける */
+.mm-item.default::after { content: "既定"; margin-left: auto; font-size: 10px; color: var(--text-3); }
+.mm-item.active.default::after { color: var(--on-accent); opacity: .8; }
+.mm-item.mm-pin, .mm-item.mm-more { color: var(--text-2); font-size: 11px; }
+.mm-sep { height: 1px; margin: 4px 0; background: var(--border); }
 
 /* ── モード選択オーバーレイ ──────────────────────────────────────────────── */
 #mode-overlay {
@@ -384,6 +412,11 @@ select option { background: var(--bg-panel); color: var(--text); }
   font-size: 11px; font-family: inherit; transition: background .15s;
 }
 .s-row-actions button:hover { background: var(--bg-hover); }
+/* 種類 → 既定モードの対応表。「即実行」が種類別でないときは薄くして触れなくする */
+.s-kind-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; align-items: center; }
+.s-kind-grid span { font-size: 12px; color: var(--text-2); }
+.s-row.s-disabled { opacity: .45; }
+.s-row.s-disabled select { cursor: default; }
 .s-row-split { display: flex; gap: 12px; }
 .s-row-split .s-row { flex: 1; }
 #settings-msg { font-size: 12px; min-height: 18px; margin: 0 22px 8px; }

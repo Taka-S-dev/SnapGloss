@@ -2,9 +2,22 @@ import { invoke } from "@tauri-apps/api/core";
 import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { enlargeForOverlay, restoreAfterOverlay } from "./windowFit";
 import { z } from "zod";
-import { DEFAULT_PROMPTS, type Prompt, type Settings } from "./state";
+import { DEFAULT_PROMPTS, DEFAULT_MODES, AUTO_RUN_BY_KIND, AUTO_RUN_LAST, type Prompt, type Settings } from "./state";
 import { he } from "./renderer";
 import { $ } from "./ui";
+import { type TextKind, TEXT_KIND_LABELS } from "./textKind";
+
+const TEXT_KINDS = Object.keys(TEXT_KIND_LABELS) as TextKind[];
+
+// 種類ごとの既定モード。未設定の種類は既定値で補い、余計なキーは落とす
+function normalizeDefaultModes(p: unknown): Record<TextKind, string> {
+  const src = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+  const out = { ...DEFAULT_MODES };
+  for (const k of TEXT_KINDS) {
+    if (typeof src[k] === "string" && src[k]) out[k] = src[k] as string;
+  }
+  return out;
+}
 
 // 設定は %APPDATA%\SnapGloss\settings.json に保存する（apikey と同じ場所）。
 // 起動時に initSettings() で一度読み込み、以降は同期の loadSettings() がキャッシュを返す。
@@ -42,7 +55,9 @@ function normalizeSettings(p: Partial<Settings> | null): Settings {
     hotkey:      p?.hotkey      ?? "ctrl+shift+z",
     autoHide:    p?.autoHide    ?? false,
     theme:       p?.theme       ?? "auto",
-    autoRun:     p?.autoRun     ?? "",
+    // 初期値は「種類ごとの既定で即実行」。保存済みの "" （モード選択を出す）は尊重する
+    autoRun:     p?.autoRun     ?? AUTO_RUN_BY_KIND,
+    defaultModes: normalizeDefaultModes(p?.defaultModes),
     // 未設定なら既定を採用。空配列は「何も除外しない」という有効な設定なので尊重する
     excludedApps: Array.isArray(p?.excludedApps)
       ? normalizeAppNames(p!.excludedApps)
@@ -214,6 +229,7 @@ const ExportSchema = z.object({
   hotkey: z.string().optional(),
   theme: z.enum(["auto", "light", "dark"]).optional(),
   autoRun: z.string().optional(),
+  defaultModes: z.record(z.string(), z.string()).optional(),
   autoHide: z.boolean().optional(),
   excludedApps: z.array(z.string()).optional(),
   prompts: z.array(z.object({ name: z.string().min(1), text: z.string().min(1) })).min(1),
@@ -241,6 +257,7 @@ async function exportSettings() {
     hotkey:      ($("s-hotkey")   as HTMLInputElement).value.trim(),
     theme:       ($("s-theme")    as HTMLSelectElement).value as Settings["theme"],
     autoRun:     ($("s-autorun")  as HTMLSelectElement).value,
+    defaultModes: getDefaultModes(),
     autoHide:    ($("s-autohide") as HTMLInputElement).checked,
     excludedApps: getExcludedApps(),
     prompts:     getPrompts(),
@@ -283,7 +300,14 @@ async function importSettings() {
   if (parsed.autoHide    !== undefined) ($("s-autohide") as HTMLInputElement).checked = parsed.autoHide;
   if (parsed.excludedApps !== undefined) setExcludedApps(normalizeAppNames(parsed.excludedApps));
   renderPrompts(parsed.prompts);
-  renderAutoRunOptions({ ...loadSettings(), prompts: parsed.prompts, autoRun: parsed.autoRun ?? "" });
+  const imported: Settings = {
+    ...loadSettings(),
+    prompts: parsed.prompts,
+    autoRun: parsed.autoRun ?? "",
+    defaultModes: normalizeDefaultModes(parsed.defaultModes),
+  };
+  renderAutoRunOptions(imported);
+  renderDefaultModeOptions(imported);
   settingsMsg(`${parsed.prompts.length} 件のプロンプトを読み込みました。「保存」で確定します`, true);
 }
 
@@ -298,10 +322,48 @@ function renderAutoRunOptions(s: Settings) {
     sel.appendChild(opt);
   };
   add("", "オフ（モード選択を表示）");
-  add("__last__", "前回使ったモード");
+  add(AUTO_RUN_BY_KIND, "テキストの種類ごとの既定モード（下の表）");
+  add(AUTO_RUN_LAST, "前回使ったモード");
   for (const p of s.prompts) add(p.name, `「${p.name}」で実行`);
   // 保存値のプロンプトが削除・改名されていたらオフに戻す
   sel.value = [...sel.options].some(o => o.value === s.autoRun) ? s.autoRun : "";
+  syncDefaultModesEnabled();
+}
+
+// 種類ごとの既定モードは「即実行」が種類別のときにしか使われない。それ以外のときは
+// 触れないようにして、無関係な設定に見えないようにする
+function syncDefaultModesEnabled() {
+  const on = ($("s-autorun") as HTMLSelectElement).value === AUTO_RUN_BY_KIND;
+  $("s-default-modes").classList.toggle("s-disabled", !on);
+  for (const kind of TEXT_KINDS) ($(`s-default-${kind}`) as HTMLSelectElement).disabled = !on;
+}
+
+// 種類ごとの既定モードは 4 つのセレクト。選択肢はプロンプト一覧に依存するので開くたびに作り直す
+function renderDefaultModeOptions(s: Settings) {
+  for (const kind of TEXT_KINDS) {
+    const sel = $(`s-default-${kind}`) as HTMLSelectElement;
+    sel.innerHTML = "";
+    for (const p of s.prompts) {
+      const opt = document.createElement("option");
+      opt.value = p.name;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    }
+    const want = s.defaultModes[kind];
+    // 保存値のプロンプトが消えていたら、初期値 → 先頭 の順で代替する
+    sel.value = [...sel.options].some(o => o.value === want) ? want
+              : [...sel.options].some(o => o.value === DEFAULT_MODES[kind]) ? DEFAULT_MODES[kind]
+              : (s.prompts[0]?.name ?? "");
+  }
+}
+
+function getDefaultModes(): Record<TextKind, string> {
+  const out = { ...DEFAULT_MODES };
+  for (const kind of TEXT_KINDS) {
+    const v = ($(`s-default-${kind}`) as HTMLSelectElement).value;
+    if (v) out[kind] = v;
+  }
+  return out;
 }
 
 // 除外アプリは1行1件のテキストエリアで編集する
@@ -340,6 +402,7 @@ async function doSaveSettings() {
     autoHide:    ($("s-autohide") as HTMLInputElement).checked,
     theme:       ($("s-theme") as HTMLSelectElement).value as Settings["theme"],
     autoRun:     ($("s-autorun") as HTMLSelectElement).value,
+    defaultModes: getDefaultModes(),
     excludedApps: getExcludedApps(),
     prompts:     getPrompts(),
   };
@@ -374,6 +437,7 @@ export async function openSettings() {
   ($("s-theme") as HTMLSelectElement).value = s.theme;
   setExcludedApps(s.excludedApps);
   renderAutoRunOptions(s);
+  renderDefaultModeOptions(s);
   renderPrompts(s.prompts);
   $("settings-msg").textContent = "";
   $("settings-msg").className = "";
@@ -434,6 +498,7 @@ export function initSettingsModal() {
   $("settings-cancel").addEventListener("click", closeSettings);
   $("settings-save").addEventListener("click", doSaveSettings);
   $("s-excluded-reset").addEventListener("click", () => setExcludedApps(defaultExcludedApps()));
+  $("s-autorun").addEventListener("change", syncDefaultModesEnabled);
   $("prompts-add").addEventListener("click", () => $("prompts-list").appendChild(makePromptRow("", "")));
   $("prompts-export").addEventListener("click", exportSettings);
   $("prompts-import").addEventListener("click", importSettings);

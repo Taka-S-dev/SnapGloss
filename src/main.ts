@@ -16,6 +16,7 @@ import { initContextMenu, showContextMenu } from "./contextMenu";
 import { processFollowup, processText } from "./api";
 import { toPlainText } from "./renderer";
 import { initHistory, closeHistory, isHistoryOpen } from "./history";
+import { initModeTabs } from "./modeTabs";
 
 let _copyTimer: ReturnType<typeof setTimeout> | null = null;
 function showCopyFeedback() {
@@ -94,7 +95,7 @@ async function init() {
     if (isModePending()) {
       // 取得できなかった（選択なし・コピー失敗）ときは、空欄のまま手入力を待つ
       if (!event.payload.trim()) { setModePending(false); return; }
-      const auto = resolveAutoRunPrompt(loadSettings().autoRun);
+      const auto = resolveAutoRunPrompt(loadSettings().autoRun, event.payload);
       if (auto) {
         setModePending(false);
         runPrompt(event.payload, auto);
@@ -113,7 +114,7 @@ async function init() {
     if ($("settings-overlay").classList.contains("open")) closeSettings();
     if (isHistoryOpen()) closeHistory();
     // 即実行が設定されていて取得テキストがあれば、モード選択を飛ばす
-    const auto = resolveAutoRunPrompt(loadSettings().autoRun);
+    const auto = resolveAutoRunPrompt(loadSettings().autoRun, event.payload);
     if (auto && event.payload.trim()) {
       runPrompt(event.payload, auto);
       return;
@@ -151,6 +152,7 @@ async function init() {
   initContextMenu();
   initPaneSep();
   initHistory();
+  initModeTabs();
 
   for (const id of ["content", "content-followup"]) {
     $(id).addEventListener("contextmenu", e => {

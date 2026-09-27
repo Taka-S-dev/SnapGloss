@@ -1,6 +1,20 @@
 import { z } from "zod";
+import type { TextKind } from "./textKind";
 
 export interface Prompt { name: string; text: string; }
+
+export const AUTO_RUN_BY_KIND = "__auto__";
+export const AUTO_RUN_LAST = "__last__";
+
+// 文章の既定は「翻訳（自動）」。種類判定は英語と日本語しか見ておらず、中国語は漢字で
+// 日本語に、欧州語は「その他」に落ちる。方向の判定をモデルに任せれば判定ミスが無害になる
+export const DEFAULT_MODES: Record<TextKind, string> = {
+  word:  "辞書（英単語）",
+  en:    "翻訳（自動）",
+  ja:    "翻訳（自動）",
+  other: "質問",
+};
+
 export interface Message { role: "system" | "user" | "assistant"; content: string; }
 
 export const ChatCompletionSchema = z.object({
@@ -28,8 +42,14 @@ export interface Settings {
   hotkey: string;
   autoHide: boolean;
   theme: "auto" | "light" | "dark";
-  /** ホットキーで即実行するモード。"" = オフ、"__last__" = 前回のモード、それ以外はプロンプト名 */
+  /**
+   * ホットキーで即実行するモード。
+   * "" = オフ（モード選択を表示）、"__auto__" = テキストの種類ごとの既定（defaultModes）、
+   * "__last__" = 前回のモード、それ以外はプロンプト名
+   */
   autoRun: string;
+  /** テキストの種類 → 既定モード（プロンプト名）。結果画面のピンで変更できる */
+  defaultModes: Record<TextKind, string>;
   /**
    * 前面のときに Ctrl+C を送らないアプリの実行ファイル名（小文字）。
    * 既定値は Rust 側の DEFAULT_EXCLUDED_APPS が正で、default_excluded_apps コマンドで取得する。
