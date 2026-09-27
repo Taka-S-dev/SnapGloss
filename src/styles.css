@@ -221,12 +221,17 @@ select option { background: var(--bg-panel); color: var(--text); }
   z-index: 400; align-items: center; justify-content: center;
 }
 #mode-overlay.open { display: flex; }
+/* 箱は幅・高さとも上限までウィンドウを使う。取り込んだテキストとモード一覧を
+   一画面で見渡せることを優先し、足りないときはテキスト欄から先に縮める
+   （flex-shrink の比率）。一覧はスクロールさせず全件見せる */
 #mode-box {
   background: var(--bg-panel); border-radius: 10px; padding: 20px 22px;
-  width: 480px; max-width: 95vw; max-height: 85vh;
+  width: min(720px, 95vw); max-height: 85vh; overflow-y: auto;
   box-shadow: 0 8px 40px rgba(0,0,0,.3); display: flex; flex-direction: column; gap: 12px;
 }
-.mo-text-wrap { position: relative; }
+/* 低いウィンドウでは、テキスト欄を 1 行まで縮めて一覧を優先する（一覧は潰さない）。
+   それでも足りなければ箱全体がスクロールする（隠さない） */
+.mo-text-wrap { position: relative; display: flex; flex-direction: column; flex: 1 3 auto; min-height: 36px; }
 /* 選択範囲の取得待ち。空欄と見分けがつかないと「取得に失敗した」と読めてしまうので、
    入力欄そのものを覆って文言を置く。150ms 以上かかるときだけ出る（modeOverlay.ts） */
 #mo-pending {
@@ -237,10 +242,12 @@ select option { background: var(--bg-panel); color: var(--text); }
 #mo-pending .spinner { width: 16px; height: 16px; border-width: 2px; }
 #mode-box.pending #mo-pending { display: flex; }
 #mode-box.pending #mo-text { border-color: var(--accent); }
+/* 高さは開いたときに中身に合わせて JS が決める（modeOverlay.ts の fitTextarea）。
+   その後は手で伸縮できる */
 #mo-text {
   width: 100%; padding: 8px 44px 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
-  font-size: 13px; font-family: inherit; resize: vertical; min-height: 72px;
-  outline: none; transition: border-color .15s; display: block;
+  font-size: 13px; line-height: 1.5; font-family: inherit; resize: vertical; min-height: 34px;
+  outline: none; transition: border-color .15s; display: block; flex: 1 1 auto;
   background: var(--bg-panel); color: var(--text);
 }
 #mo-text:focus { border-color: var(--accent); }
@@ -258,7 +265,18 @@ select option { background: var(--bg-panel); color: var(--text); }
   background: var(--bg-panel); color: var(--text);
 }
 #mo-search:focus { border-color: var(--accent); }
-#mo-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 220px; }
+/* 既定の 8 モードが縦に全部並ぶ高さを確保する。プロンプトを増やして箱に収まらなく
+   なったときだけスクロールする（min-height は 4 行ぶん） */
+/* 一覧は縮めない（潰れて重なるより、箱ごとスクロールするほうがまし） */
+#mo-list { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
+#mo-search, #mo-chat { flex-shrink: 0; }
+/* 件数が多いときは 2 列（--mo-rows は modeOverlay.ts が件数から決める）。
+   列を先に埋めるので、番号は左列を上から → 右列の順に読める */
+#mo-list.two-col {
+  display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column;
+  grid-template-rows: repeat(var(--mo-rows), auto); column-gap: 8px;
+}
+#mo-list.two-col button { overflow: hidden; text-overflow: ellipsis; }
 #mo-list button {
   padding: 7px 12px; border: none; border-radius: 6px; text-align: left;
   background: transparent; cursor: pointer; font-size: 13px;

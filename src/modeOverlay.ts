@@ -23,6 +23,13 @@ function normalizeQuery(query: string): string {
     .trim();
 }
 
+// 一覧は件数が多いとき 2 列にする（縦 1 列だと 9 件でスクロールが要り、箱も背が高くなる）。
+// 番号は左の列を上から、次に右の列、の順（grid-auto-flow: column）
+const LIST_ROWS_FOR_TWO_COLUMNS = 6;
+function listRows(n: number): number {
+  return n > LIST_ROWS_FOR_TWO_COLUMNS ? Math.ceil(n / 2) : n;
+}
+
 function renderFilteredList(query: string) {
   const s = loadSettings();
   const q = normalizeQuery(query);
@@ -36,6 +43,8 @@ function renderFilteredList(query: string) {
 
   const list = $("mo-list");
   list.innerHTML = "";
+  list.classList.toggle("two-col", _filteredItems.length > LIST_ROWS_FOR_TWO_COLUMNS);
+  list.style.setProperty("--mo-rows", String(listRows(_filteredItems.length)));
   _filteredItems.forEach((it, i) => {
     const btn = document.createElement("button");
     const num = document.createElement("span");
@@ -154,6 +163,9 @@ function fitTextarea(ta: HTMLTextAreaElement) {
   ta.style.height = `${ta.scrollHeight + 2}px`; // +2 は上下 border
 }
 
+// ここでは windowFit の一時拡大を使わない。ホットキー直後は非アクティブ表示・位置決め・
+// モニター間の再スケールが同時に走っていて、その途中で読んだサイズを「元のサイズ」として
+// 覚えてしまい、戻すときに壊れる。低いウィンドウでは箱の中でスクロールさせる（styles.css）
 export function showModeOverlay(text: string) {
   if (_pending) setModePending(false);
   const ta = $("mo-text") as HTMLTextAreaElement;
@@ -174,6 +186,7 @@ export function showModeOverlay(text: string) {
   }
   renderFilteredList("");
   $("mode-overlay").classList.add("open");
+  fitTextarea(ta);
   ($("mo-search") as HTMLInputElement).focus();
 }
 
@@ -186,14 +199,18 @@ export function initModeOverlay() {
   $("mo-clear").addEventListener("click", () => {
     const ta = $("mo-text") as HTMLTextAreaElement;
     ta.value = "";
+    fitTextarea(ta);
     ta.focus();
   });
-  // テキスト欄から Ctrl+Enter で選択中モードを即実行
+  // テキスト欄から Ctrl+Enter で選択中モードを即実行。Tab は検索欄へ
   ($("mo-text") as HTMLTextAreaElement).addEventListener("keydown", e => {
     if (e.key === "Enter" && e.ctrlKey) {
       e.preventDefault();
       const it = _filteredItems[_activeIdx];
       if (it) selectMode(it.p.name, it.p.text);
+    } else if (e.key === "Tab" && !e.shiftKey) {
+      e.preventDefault();
+      ($("mo-search") as HTMLInputElement).focus();
     }
   });
   // 番号入力が1件に絞れたら即実行（9個以下なら1桁で決まるので従来の一発実行と同じ）。
@@ -223,6 +240,12 @@ export function initModeOverlay() {
       e.preventDefault();
       _activeIdx = Math.max(_activeIdx - 1, 0);
       updateActiveBtn();
+    } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && _filteredItems.length > LIST_ROWS_FOR_TWO_COLUMNS) {
+      // 2 列表示のとき ←→ で隣の列へ（番号は列ごとに上から振ってあるので 1 列分だけ跳ぶ）
+      e.preventDefault();
+      const rows = listRows(_filteredItems.length);
+      const next = _activeIdx + (e.key === "ArrowRight" ? rows : -rows);
+      if (next >= 0 && next < _filteredItems.length) { _activeIdx = next; updateActiveBtn(); }
     } else if (e.key === "Enter" && !e.isComposing) {
       // 変換確定の Enter で実行しない（モード名は日本語なので検索欄で IME を使う）
       e.preventDefault();
